@@ -1,1 +1,30 @@
+def find_total_distance(distances):
+    if distances is None or len(distances) == 0:
+        print("No distances")
+        return -1
+    total_distance = 0.0
+    for distance in distances:
+        total_distance += distance
+    return total_distance
+
+def find_total_gas_used(distances, gas_per_unit_distance):
+    total_distance = find_total_distance(distances)
+    if total_distance == -1:
+        return -1
+    total_gas = total_distance * gas_per_unit_distance
+    return total_gas
+
+if __name__ == "__main__":
+    distances = [
+        5.0,
+        7.5,
+        3.2]
+    gas_rate = 0.1
+    total_distance = find_total_distance(distances)
+    total_gas_used = find_total_gas_used(distances, gas_rate)
+    print("Total distance:", total_distance)
+    print("Total gas used:", total_gas_used)
+_________________________________________________________________________________
+
+
 
