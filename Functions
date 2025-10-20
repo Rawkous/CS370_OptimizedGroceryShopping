@@ -1,30 +1,97 @@
-def find_total_distance(distances):
-    if distances is None or len(distances) == 0:
-        print("No distances")
-        return -1
-    total_distance = 0.0
-    for distance in distances:
-        total_distance += distance
-    return total_distance
+import random
+import math
 
-def find_total_gas_used(distances, gas_per_unit_distance):
-    total_distance = find_total_distance(distances)
-    if total_distance == -1:
-        return -1
-    total_gas = total_distance * gas_per_unit_distance
-    return total_gas
+def haversine(lat1, lon1, lat2, lon2):
+    R = 3958.8
+    dLat = math.radians(lat2 - lat1)
+    dLon = math.radians(lon2 - lon1)
+    a = math.sin(dLat/2)**2 + math.cos(math.radians(lat1)) * math.cos(math.radians(lat2)) * math.sin(dLon/2)**2
+    c = 2 * math.atan2(math.sqrt(a), math.sqrt(1-a))
+    return R * c
+
+
+class User:
+    def __init__(self, ID, latitude, longitude):
+        self.id = ID
+        self.latitude = latitude
+        self.longitude = longitude
+        self.items = []
+
+    def getID(self):
+        return self.id
+
+    def getLatitude(self):
+        return self.latitude
+
+    def getLongitude(self):
+        return self.longitude
+
+    def getItems(self):
+        return self.items
+
+    def genItems(self, num_items=5):
+        for _ in range(num_items):
+            lat = random.uniform(-90, 90)
+            lon = random.uniform(-180, 180)
+            self.items.append((lat, lon))
+
+def genUsers(numUsers=1):
+    users = []
+    for _ in range(numUsers):
+        ID = random.randint(100000, 999999)
+        lat = random.uniform(-90, 90)
+        lon = random.uniform(-180, 180)
+        user = User(ID, lat, lon)
+        user.genItems()  # generate random item locations
+        users.append(user)
+    return users
+
+
+
+def find_shortest_route(start, items):
+    route = []
+    current = start
+    total_distance = 0.0
+    remaining = items.copy()
+
+    while remaining:
+        next_item = min(remaining, key=lambda loc: haversine(current[0], current[1], loc[0], loc[1]))
+        dist = haversine(current[0], current[1], next_item[0], next_item[1])
+        total_distance += dist
+        route.append((next_item, dist))
+        current = next_item
+        remaining.remove(next_item)
+
+    return route, total_distance
+
+
+def find_total_gas_used(total_distance, gas_per_mile):
+    return total_distance * gas_per_mile
+
 
 if __name__ == "__main__":
-    distances = [
-        5.0,
-        7.5,
-        3.2]
-    gas_rate = 0.1
-    total_distance = find_total_distance(distances)
-    total_gas_used = find_total_gas_used(distances, gas_rate)
-    print("Total distance:", total_distance)
-    print("Total gas used:", total_gas_used)
-_________________________________________________________________________________
+    gas_rate = 0.05  # gallons per mile
+    users = genUsers()
+
+    for user in users:
+
+        print(f"User ID: {user.getID()}")
+        print(f"Start Location: {user.getLatitude():.6f}, {user.getLongitude():.6f}")
+
+        print("Item Locations:")
+        for item in user.getItems():
+            print(f"{item[0]:.6f}, {item[1]:.6f}")
+
+        start_location = (user.getLatitude(), user.getLongitude())
+        route, total_distance = find_shortest_route(start_location, user.getItems())
+        gas_used = find_total_gas_used(total_distance, gas_rate)
+
+        print("Route Taken (lat, lon, distance in miles):")
+        for loc, dist in route:
+            print(f"{loc[0]:.6f}, {loc[1]:.6f}, {dist:.2f}")
+
+        print(f"Total Distance Traveled: {total_distance:.2f} miles")
+        print(f"Total Gas Used: {gas_used:.2f} gallons")
 
 
-
+___________________________________________________________________________________________
