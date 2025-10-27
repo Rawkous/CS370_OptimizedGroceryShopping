@@ -1,97 +1,192 @@
-import random
 import math
+import paramiko
+import socket
+import select
+import threading
+import mysql.connector
 
+
+# ---------------------- #
+#     Distance Formula   #
+# ---------------------- #
 def haversine(lat1, lon1, lat2, lon2):
+    """Great-circle distance between two lat/lon pairs (in miles)."""
     R = 3958.8
     dLat = math.radians(lat2 - lat1)
     dLon = math.radians(lon2 - lon1)
-    a = math.sin(dLat/2)**2 + math.cos(math.radians(lat1)) * math.cos(math.radians(lat2)) * math.sin(dLon/2)**2
-    c = 2 * math.atan2(math.sqrt(a), math.sqrt(1-a))
+    a = (math.sin(dLat / 2) ** 2 +
+         math.cos(math.radians(lat1)) * math.cos(math.radians(lat2)) *
+         math.sin(dLon / 2) ** 2)
+    c = 2 * math.atan2(math.sqrt(a), math.sqrt(1 - a))
     return R * c
 
 
-class User:
-    def __init__(self, ID, latitude, longitude):
-        self.id = ID
-        self.latitude = latitude
-        self.longitude = longitude
-        self.items = []
-
-    def getID(self):
-        return self.id
-
-    def getLatitude(self):
-        return self.latitude
-
-    def getLongitude(self):
-        return self.longitude
-
-    def getItems(self):
-        return self.items
-
-    def genItems(self, num_items=5):
-        for _ in range(num_items):
-            lat = random.uniform(-90, 90)
-            lon = random.uniform(-180, 180)
-            self.items.append((lat, lon))
-
-def genUsers(numUsers=1):
-    users = []
-    for _ in range(numUsers):
-        ID = random.randint(100000, 999999)
-        lat = random.uniform(-90, 90)
-        lon = random.uniform(-180, 180)
-        user = User(ID, lat, lon)
-        user.genItems()  # generate random item locations
-        users.append(user)
-    return users
-
-
-
-def find_shortest_route(start, items):
-    route = []
+# ---------------------- #
+#   Route Optimization   #
+# ---------------------- #
+def find_shortest_route(start, locations):
+    """Greedy nearest-neighbor route from start through all locations."""
     current = start
+    remaining = locations.copy()
+    route = []
     total_distance = 0.0
-    remaining = items.copy()
 
     while remaining:
-        next_item = min(remaining, key=lambda loc: haversine(current[0], current[1], loc[0], loc[1]))
-        dist = haversine(current[0], current[1], next_item[0], next_item[1])
+        next_loc = min(remaining, key=lambda loc: haversine(current[0], current[1], loc[0], loc[1]))
+        dist = haversine(current[0], current[1], next_loc[0], next_loc[1])
+        route.append({"from": current, "to": next_loc, "distance": dist})
         total_distance += dist
-        route.append((next_item, dist))
-        current = next_item
-        remaining.remove(next_item)
+        current = next_loc
+        remaining.remove(next_loc)
 
     return route, total_distance
 
 
-def find_total_gas_used(total_distance, gas_per_mile):
-    return total_distance * gas_per_mile
+# ---------------------- #
+#    SSH Port Forwarder  #
+# ---------------------- #
+def forward_tunnel(local_port, remote_host, remote_port, transport):
+    """Forward a local TCP port to the remote MySQL server."""
+    class Handler(threading.Thread):
+        def __init__(self, chan, sock):
+            super().__init__()
+            self.chan = chan
+            self.sock = sock
+
+        def run(self):
+            while True:
+                r, _, _ = select.select([self.sock, self.chan], [], [])
+                if self.sock in r:
+                    data = self.sock.recv(1024)
+                    if len(data) == 0:
+                        break
+                    self.chan.send(data)
+                if self.chan in r:
+                    data = self.chan.recv(1024)
+                    if len(data) == 0:
+                        break
+                    self.sock.send(data)
+            self.sock.close()
+            self.chan.close()
+
+    sock = socket.socket()
+    sock.bind(('127.0.0.1', local_port))
+    sock.listen(1)
+    print(f"🔗 Forwarding 127.0.0.1:{local_port} → {remote_host}:{remote_port}")
+
+    def accept():
+        while True:
+            client_sock, _ = sock.accept()
+            chan = transport.open_channel(
+                'direct-tcpip',
+                (remote_host, remote_port),
+                client_sock.getsockname()
+            )
+            handler = Handler(chan, client_sock)
+            handler.start()
+
+    threading.Thread(target=accept, daemon=True).start()
 
 
+# ---------------------- #
+#  SSH + MySQL Connect   #
+# ---------------------- #
+def connect_via_ssh():
+    """Connect to Sonoma State MySQL via SSH (no sshtunnel)."""
+    SSH_HOST = "blue.cs.sonoma.edu"
+    SSH_PORT = 22
+    SSH_USER = "sshaw"
+    SSH_PASSWORD = "gluedGorilla101"
+
+    MYSQL_HOST = "127.0.0.1"
+    MYSQL_PORT = 3306
+    MYSQL_USER = "SDD_003_user"
+    MYSQL_PASSWORD = "SDD_003_29"
+    MYSQL_DB = "SDD_003_database"
+
+    local_port = 3307  # Local forwarding port
+
+    # Establish SSH connection
+    client = paramiko.SSHClient()
+    client.set_missing_host_key_policy(paramiko.AutoAddPolicy())
+    print(f"Connecting to {SSH_HOST} via SSH...")
+    client.connect(SSH_HOST, port=SSH_PORT, username=SSH_USER, password=SSH_PASSWORD)
+    print("✅ SSH connection established")
+
+    # Forward MySQL port
+    transport = client.get_transport()
+    forward_tunnel(local_port, MYSQL_HOST, MYSQL_PORT, transport)
+
+    # Connect to MySQL
+    print("Connecting to MySQL database through SSH tunnel...")
+    conn = mysql.connector.connect(
+        host="127.0.0.1",
+        port=local_port,
+        user=MYSQL_USER,
+        password=MYSQL_PASSWORD,
+        database=MYSQL_DB
+    )
+    print("✅ MySQL connection established")
+
+    return client, conn
+
+
+# ---------------------- #
+#     Fetch Data         #
+# ---------------------- #
+def fetch_stores(conn, limit=10):
+    """Fetch store names and coordinates."""
+    cursor = conn.cursor()
+    cursor.execute(f"""
+        SELECT id, name, ST_Y(location) AS latitude, ST_X(location) AS longitude
+        FROM store
+        LIMIT {limit};
+    """)
+    rows = cursor.fetchall()
+    return [{"id": r[0], "name": r[1], "lat": r[2], "lon": r[3]} for r in rows]
+
+
+# ---------------------- #
+#   Main Computation     #
+# ---------------------- #
+def run_calculation_via_ssh(start_lat, start_lon, limit=10):
+    """Fetch stores and calculate shortest route."""
+    ssh_client, conn = connect_via_ssh()
+    stores = fetch_stores(conn, limit)
+    conn.close()
+    ssh_client.close()
+
+    if not stores:
+        print("⚠️ No stores found in database.")
+        return
+
+    print(f"\nFetched {len(stores)} stores from the database:")
+    for s in stores:
+        print(f" - {s['name']} ({s['lat']:.4f}, {s['lon']:.4f})")
+
+    start_point = (start_lat, start_lon)
+    store_points = [(s['lat'], s['lon']) for s in stores]
+
+    route, total_distance = find_shortest_route(start_point, store_points)
+
+    print("\n📍 Optimized Route:")
+    for step in route:
+        print(f"  From ({step['from'][0]:.4f}, {step['from'][1]:.4f}) "
+              f"→ To ({step['to'][0]:.4f}, {step['to'][1]:.4f}) "
+              f"= {step['distance']:.2f} mi")
+
+    print(f"\n🚗 Total Distance: {total_distance:.2f} miles")
+
+
+# ---------------------- #
+#         Run It         #
+# ---------------------- #
 if __name__ == "__main__":
-    gas_rate = 0.05  # gallons per mile
-    users = genUsers()
+    START_LAT = 33.7490  # Example: Atlanta, GA
+    START_LON = -84.3880
+    run_calculation_via_ssh(START_LAT, START_LON, limit=6)
 
-    for user in users:
+    import sys
 
-        print(f"User ID: {user.getID()}")
-        print(f"Start Location: {user.getLatitude():.6f}, {user.getLongitude():.6f}")
-
-        print("Item Locations:")
-        for item in user.getItems():
-            print(f"{item[0]:.6f}, {item[1]:.6f}")
-
-        start_location = (user.getLatitude(), user.getLongitude())
-        route, total_distance = find_shortest_route(start_location, user.getItems())
-        gas_used = find_total_gas_used(total_distance, gas_rate)
-
-        print("Route Taken (lat, lon, distance in miles):")
-        for loc, dist in route:
-            print(f"{loc[0]:.6f}, {loc[1]:.6f}, {dist:.2f}")
-
-        print(f"Total Distance Traveled: {total_distance:.2f} miles")
-        print(f"Total Gas Used: {gas_used:.2f} gallons")
-
-
-___________________________________________________________________________________________
+    sys.exit(0)
+______________________________________________________________________________________
