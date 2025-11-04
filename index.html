@@ -1,0 +1,97 @@
+<!doctype html>
+<html lang="en">
+<head>
+    <meta charset="utf-8"/>
+    <meta name="viewport" content="width=device-width,initial-scale=1"/>
+    <title>Closest & Cheapest</title>
+    <style>
+        body{font-family:system-ui,Arial,sans-serif;margin:24px;max-width:900px}
+        .row{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:12px}
+        input,button{padding:8px;font-size:15px}
+        .card{border:1px solid #ddd;border-radius:8px;padding:12px;margin:8px 0}
+        table{width:100%;border-collapse:collapse}
+        th,td{border-bottom:1px solid #eee;padding:8px;text-align:left}
+        .muted{color:#666}
+    </style>
+</head>
+<body>
+<h1>Find the closest & cheapest store</h1>
+
+<div class="row">
+    <button id="geo">Use my location</button>
+    <input id="lat" type="number" step="any" placeholder="Latitude"/>
+    <input id="lon" type="number" step="any" placeholder="Longitude"/>
+</div>
+
+<div class="row">
+    <input id="items" style="min-width:380px" placeholder="Items (comma-separated): banana, egg, bread"/>
+    <input id="radius" type="number" step="0.1" value="10" style="width:120px"/> miles radius
+    <input id="lambda" type="number" step="0.1" value="0.5" style="width:120px"/> $/mile weight
+    <button id="search">Search</button>
+</div>
+
+<div id="result"></div>
+
+<script>
+    const apiBase = 'http://127.0.0.1:5000';
+
+    document.getElementById('geo').onclick = () => {
+        if (!navigator.geolocation) return alert("Geolocation not supported");
+        navigator.geolocation.getCurrentPosition(pos => {
+            document.getElementById('lat').value = pos.coords.latitude.toFixed(6);
+            document.getElementById('lon').value = pos.coords.longitude.toFixed(6);
+        }, err => alert(err.message), { enableHighAccuracy:true, timeout:8000 });
+    };
+
+    document.getElementById('search').onclick = async () => {
+        const lat = document.getElementById('lat').value.trim();
+        const lon = document.getElementById('lon').value.trim();
+        const items = document.getElementById('items').value.trim();
+        const radius = document.getElementById('radius').value.trim();
+        const lambda = document.getElementById('lambda').value.trim();
+        if (!lat || !lon) return alert("Please provide lat/lon (or click 'Use my location').");
+        const url = new URL(apiBase + '/api/search');
+        url.searchParams.set('lat', lat);
+        url.searchParams.set('lon', lon);
+        if (items) url.searchParams.set('items', items);
+        url.searchParams.set('radius_miles', radius || '10');
+        url.searchParams.set('lambda_per_mile', lambda || '0.5');
+        const res = await fetch(url);
+        const data = await res.json();
+        render(data);
+    };
+
+    function render(data){
+        const el = document.getElementById('result');
+        if (data.error) { el.innerHTML = `<div class="card">Error: ${data.error}</div>`; return; }
+        let html = '';
+        if (data.best){
+            const b = data.best;
+            html += `<div class="card"><h3>Best store: ${b.store_name}</h3>
+      <div class="muted">${b.distance_miles.toFixed(2)} miles • Total $${b.total_price.toFixed(2)} • Score ${b.score.toFixed(2)}</div>
+      ${Array.isArray(b.items_missing) && b.items_missing.length ? `<div class="muted">Missing: ${b.items_missing.join(', ')}</div>` : ''}
+    </div>`;
+        } else {
+            html += `<div class="card">No stores found in the selected radius.</div>`;
+        }
+        const rows = (data.stores_full||[]).concat(data.stores_partial||[]);
+        if (rows.length){
+            html += `<table><thead><tr>
+      <th>Store</th><th>Distance</th><th>Total</th><th>Items Found</th><th>Missing</th>
+    </tr></thead><tbody>`;
+            for (const s of rows){
+                html += `<tr>
+        <td>${s.store_name}</td>
+        <td>${s.distance_miles.toFixed(2)} mi</td>
+        <td>$${(s.total_price||0).toFixed(2)}</td>
+        <td>${s.items_found}</td>
+        <td>${(s.items_missing||[]).join(', ')}</td>
+      </tr>`;
+            }
+            html += `</tbody></table>`;
+        }
+        el.innerHTML = html;
+    }
+</script>
+</body>
+</html>
