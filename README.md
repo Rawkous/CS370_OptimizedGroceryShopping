@@ -10,3 +10,8 @@ python -m venv .venv
 copy .env.example .env
 
 
+The web app needs a DB tunnel (external ssh -L or USE_SSH_TUNNEL=1).
+
+If / returns 404, ensure app.py has a route that serves index.html.
+
+Don’t commit .env or venv/ + .venv/.
