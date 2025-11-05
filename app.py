@@ -405,9 +405,9 @@ def _print_db_target():
 def _db_smoke():
     try:
         rows = query("SELECT 1 AS ok", ())
-        print("✅ DB OK", rows)
+        print("DB OK", rows)
     except Exception as e:
-        print("❌ DB FAILED:", e)
+        print("DB FAILED:", e)
 
 if __name__ == "__main__":
     import argparse
@@ -465,3 +465,4 @@ if __name__ == "__main__":
 
     elif cmd == "db-check":
         _db_smoke()
+
