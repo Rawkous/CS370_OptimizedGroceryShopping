@@ -135,3 +135,60 @@ INDEX_FALLBACK = """<!doctype html>
 </script>
 </body></html>
 """
+
+
+
+
+// DO NOT INCLUDE THE FOLLOWING
+
+// these are hard coded test cases, didn't want to make a whole new file for them since it would just be easier to have them here
+
+
+function getFakeData(lat, lon) {
+  return {
+    query: { lat, lon },
+    best: {
+      store_id: "STR_001",
+      store_name: "Budget Grocer",
+      lat: 37.7893,
+      lon: -122.3997,
+      distance_miles: 0.21,
+      total_price: 8.17,
+      score: 8.27,
+      items_missing: []
+    },
+    stores_full: [
+      {
+        store_id: "STR_001",
+        store_name: "Budget Grocer",
+        lat: 37.7893,
+        lon: -122.3997,
+        distance_miles: 0.21,
+        total_price: 8.17,
+        items_found: 4,
+        items_missing: [],
+      },
+      {
+        store_id: "STR_002",
+        store_name: "Market One",
+        lat: 37.7922,
+        lon: -122.4014,
+        distance_miles: 0.23,
+        total_price: 8.48,
+        items_found: 4,
+        items_missing: [],
+      },
+      {
+        store_id: "STR_003",
+        store_name: "Neighborhood Mart",
+        lat: 37.7793,
+        lon: -122.3950,
+        distance_miles: 0.95,
+        total_price: 8.77,
+        items_found: 4,
+        items_missing: [],
+      }
+    ],
+    stores_partial: []
+  };
+}
