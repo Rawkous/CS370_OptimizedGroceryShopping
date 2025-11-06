@@ -1,4 +1,4 @@
-# app.py — unified web app + SSH tunnel + DB pool + your console features
+# app.py — unified web app + SSH tunnel + DB pool + console modes + map UI
 # -----------------------------------------------------------------------------
 # Modes:
 #   Web server (default):      python app.py
@@ -19,25 +19,23 @@ from flask_cors import CORS
 from dotenv import load_dotenv
 from mysql.connector import pooling, Error
 
-# Optional dependency (only needed if USE_SSH_TUNNEL=1)
 try:
     from sshtunnel import SSHTunnelForwarder
 except Exception:
     SSHTunnelForwarder = None
 
 # ----------------------------- Load .env first -------------------------------
-load_dotenv()  # ensure env vars exist BEFORE we decide how to connect
+load_dotenv()
 
 
 # =========================== SSH Tunnel (optional) ============================
 _TUNNEL = None
 
 def maybe_start_tunnel():
-    """Start an SSH tunnel if USE_SSH_TUNNEL=1 in .env."""
     if os.getenv("USE_SSH_TUNNEL", "0") != "1":
         return
     if SSHTunnelForwarder is None:
-        print("⚠️  sshtunnel not installed; cannot start SSH tunnel. Set USE_SSH_TUNNEL=0 or install sshtunnel.")
+        print("⚠️  sshtunnel not installed; cannot start SSH tunnel.")
         return
 
     global _TUNNEL
@@ -60,7 +58,6 @@ def maybe_start_tunnel():
         local_bind_address=("127.0.0.1", local_port),
     )
     _TUNNEL.start()
-    # Point DB at the local tunnel
     os.environ["DB_HOST"] = "127.0.0.1"
     os.environ["DB_PORT"] = str(_TUNNEL.local_bind_port)
     print(f"🔗 SSH tunnel started → 127.0.0.1:{_TUNNEL.local_bind_port}")
@@ -76,8 +73,6 @@ def _stop_tunnel():
         _TUNNEL = None
 
 atexit.register(_stop_tunnel)
-
-# Start tunnel BEFORE creating the pool
 maybe_start_tunnel()
 
 
@@ -108,9 +103,8 @@ def query(sql, params=()):
         except: pass
 
 
-# ============================ Helper Logic (yours) ============================
+# ============================ Helper Logic ====================================
 def haversine(lat1, lon1, lat2, lon2):
-    """Great-circle distance (miles)."""
     R = 3958.8
     dLat = math.radians(lat2 - lat1)
     dLon = math.radians(lon2 - lon1)
@@ -121,7 +115,6 @@ def haversine(lat1, lon1, lat2, lon2):
     return R * c
 
 def find_shortest_route(start, items):
-    """Greedy nearest-neighbor route."""
     route = []
     current = start
     total_distance = 0.0
@@ -143,7 +136,6 @@ def demo_store_scoring():
         {"name": "CornerStore","inventory": ['banana','egg'],                                 "distance": 2},
     ]
     userItems = ['banana','egg','bread','sugar']
-
     best, results = None, []
     best_score = -1
     for s in stores:
@@ -160,7 +152,6 @@ def demo_store_scoring():
     return best, results
 
 def check_items_in_price_history(items):
-    """Check item names via product join (price_history.product_upc -> product.upc)."""
     if not items:
         return {"found": [], "missing": []}
     placeholders = ", ".join(["%s"] * len(items))
@@ -181,6 +172,17 @@ INDEX_FALLBACK = """<!doctype html>
 <html lang="en"><head>
 <meta charset="utf-8"/><meta name="viewport" content="width=device-width,initial-scale=1"/>
 <title>Closest & Cheapest</title>
+
+<link
+  rel="stylesheet"
+  href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
+  crossorigin=""
+/>
+<script
+  src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"
+  crossorigin=""
+></script>
+
 <style>
 body{font-family:system-ui,Arial,sans-serif;margin:24px;max-width:900px}
 .row{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:12px}
@@ -189,6 +191,7 @@ input,button{padding:8px;font-size:15px}
 table{width:100%;border-collapse:collapse}
 th,td{border-bottom:1px solid #eee;padding:8px;text-align:left}
 .muted{color:#666}
+#map{height:400px;margin-top:16px;border-radius:8px;}
 </style>
 </head><body>
 <h1>Find the closest & cheapest store</h1>
@@ -203,16 +206,50 @@ th,td{border-bottom:1px solid #eee;padding:8px;text-align:left}
   <input id="lambda" type="number" step="0.1" value="0.5" style="width:120px"/> $/mile weight
   <button id="search">Search</button>
 </div>
+<div id="map"></div>
 <div id="result"></div>
+
 <script>
 const apiBase = window.location.origin;
+let map, markerGroup;
+
+function colorMarker(color){
+  return new L.Icon({
+    iconUrl:`https://raw.githubusercontent.com/pointhi/leaflet-color-markers/master/img/marker-icon-${color}.png`,
+    shadowUrl:"https://unpkg.com/leaflet@1.9.4/dist/images/marker-shadow.png",
+    iconSize:[25,41], iconAnchor:[12,41], popupAnchor:[1,-34], shadowSize:[41,41]
+  });
+}
+
+function initMap(lat, lon) {
+  if (!map) {
+    map = L.map("map").setView([lat, lon], 13);
+    L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
+      maxZoom: 19,
+      attribution: "&copy; OpenStreetMap contributors",
+    }).addTo(map);
+    markerGroup = L.layerGroup().addTo(map);
+  } else {
+    map.setView([lat, lon], 13);
+    markerGroup.clearLayers();
+  }
+  L.marker([lat, lon], { icon: colorMarker('blue'), title: "You" })
+    .addTo(markerGroup)
+    .bindPopup("<b>Your location</b>")
+    .openPopup();
+}
+
 document.getElementById('geo').onclick = () => {
   if (!navigator.geolocation) return alert("Geolocation not supported");
   navigator.geolocation.getCurrentPosition(pos => {
-    document.getElementById('lat').value = pos.coords.latitude.toFixed(6);
-    document.getElementById('lon').value = pos.coords.longitude.toFixed(6);
+    const lat = pos.coords.latitude.toFixed(6);
+    const lon = pos.coords.longitude.toFixed(6);
+    document.getElementById('lat').value = lat;
+    document.getElementById('lon').value = lon;
+    initMap(lat, lon);
   }, err => alert(err.message), { enableHighAccuracy:true, timeout:8000 });
 };
+
 document.getElementById('search').onclick = async () => {
   const lat = document.getElementById('lat').value.trim();
   const lon = document.getElementById('lon').value.trim();
@@ -228,6 +265,7 @@ document.getElementById('search').onclick = async () => {
   const res = await fetch(url); const data = await res.json();
   render(data);
 };
+
 function render(data){
   const el = document.getElementById('result');
   if (data.error) { el.innerHTML = `<div class="card">Error: ${data.error}</div>`; return; }
@@ -240,6 +278,7 @@ function render(data){
   } else {
     html += `<div class="card">No stores found in the selected radius.</div>`;
   }
+
   const rows = (data.stores_full||[]).concat(data.stores_partial||[]);
   if (rows.length){
     html += `<table><thead><tr><th>Store</th><th>Distance</th><th>Total</th><th>Items Found</th><th>Missing</th></tr></thead><tbody>`;
@@ -253,6 +292,35 @@ function render(data){
     html += `</tbody></table>`;
   }
   el.innerHTML = html;
+
+  if (!map) {
+    const lat = parseFloat(document.getElementById('lat').value);
+    const lon = parseFloat(document.getElementById('lon').value);
+    initMap(lat, lon);
+  }
+  markerGroup.clearLayers();
+
+  const userLat = parseFloat(document.getElementById('lat').value);
+  const userLon = parseFloat(document.getElementById('lon').value);
+  L.marker([userLat, userLon], { icon: colorMarker('blue'), title: "You" })
+    .addTo(markerGroup)
+    .bindPopup("<b>Your location</b>");
+
+  if (rows.length){
+    const best = data.best ? data.best.store_id : null;
+    for (const s of rows){
+      const color = (s.store_id === best) ? 'green' : 'red';
+      L.marker([s.lat, s.lon], { icon: colorMarker(color), title: s.store_name })
+        .addTo(markerGroup)
+        .bindPopup(`<b>${s.store_name}</b><br>${s.distance_miles.toFixed(2)} mi<br>$${(s.total_price||0).toFixed(2)}`);
+    }
+  }
+
+  if (markerGroup.getLayers().length > 0) {
+    const bounds = L.latLngBounds();
+    markerGroup.eachLayer(l => bounds.extend(l.getLatLng()));
+    map.fitBounds(bounds, { padding: [50, 50] });
+  }
 }
 </script>
 </body></html>
@@ -263,7 +331,6 @@ CORS(app)
 
 @app.get("/")
 def root():
-    # Serve ./index.html if present, else a built-in page so this file is standalone
     if Path("index.html").exists():
         return send_from_directory(".", "index.html")
     return Response(INDEX_FALLBACK, mimetype="text/html")
@@ -316,7 +383,6 @@ def api_search():
 
     rows = query(base_sql, params)
 
-    # Aggregate min price per item per store
     stores = {}
     for r in rows:
         sid = r["id"]
@@ -415,46 +481,37 @@ if __name__ == "__main__":
     sub = parser.add_subparsers(dest="cmd")
 
     sub.add_parser("web", help="Run the web server (default)")
-
-    p_check = sub.add_parser("check-items", help="Console: check item names in price_history via product join")
+    p_check = sub.add_parser("check-items", help="Console: check item names")
     p_check.add_argument("--items", required=True, help="Comma-separated list, e.g. 'banana,egg,bread'")
-
     sub.add_parser("demo-scoring", help="Console: run demo store scoring")
     p_sim = sub.add_parser("sim-route", help="Console: simulate route + gas")
     p_sim.add_argument("--lat", type=float, required=True)
     p_sim.add_argument("--lon", type=float, required=True)
     p_sim.add_argument("--n", type=int, default=5)
     p_sim.add_argument("--gas", type=float, default=0.05)
-
     sub.add_parser("db-check", help="Console: simple DB health check")
 
     args = parser.parse_args()
     cmd = args.cmd or "web"
 
-    # Sanity print
     _print_db_target()
 
     if cmd == "web":
-        # quick DB smoke on startup
         _db_smoke()
-        # 0.0.0.0 so teammates on your LAN can access http://<your-ip>:5000
         app.run(host=os.getenv("HOST", "0.0.0.0"),
                 port=int(os.getenv("PORT", "5000")),
                 debug=True, use_reloader=False)
-
     elif cmd == "check-items":
         items = [i.strip() for i in args.items.split(",") if i.strip()]
         res = check_items_in_price_history(items)
         print("Found:", res["found"])
         print("Missing:", res["missing"])
-
     elif cmd == "demo-scoring":
         best, results = demo_store_scoring()
         print("=== Demo store scoring ===")
         for r in results:
             print(r)
         print("Best:", best)
-
     elif cmd == "sim-route":
         start = (args.lat, args.lon)
         items = [(random.uniform(-90, 90), random.uniform(-180, 180)) for _ in range(args.n)]
@@ -462,7 +519,6 @@ if __name__ == "__main__":
         gas_used = total * args.gas
         print("Route:", route)
         print(f"Total distance: {total:.2f} mi   Gas used: {gas_used:.2f} gal")
-
     elif cmd == "db-check":
         _db_smoke()
 
