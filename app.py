@@ -1,5 +1,7 @@
-# app.py — unified web app + SSH tunnel + DB pool + console modes + map UI
+# app.py — unified web app + SSH tunnel + DB pool + your console features + map UI
 # -----------------------------------------------------------------------------
+#  log in Everyone uses http://10.0.0.118:5000
+# , not https
 # Modes:
 #   Web server (default):      python app.py
 #   Check items (console):     python app.py check-items --items "banana,egg,bread"
@@ -19,23 +21,25 @@ from flask_cors import CORS
 from dotenv import load_dotenv
 from mysql.connector import pooling, Error
 
+# Optional dependency (only needed if USE_SSH_TUNNEL=1)
 try:
     from sshtunnel import SSHTunnelForwarder
 except Exception:
     SSHTunnelForwarder = None
 
 # ----------------------------- Load .env first -------------------------------
-load_dotenv()
+load_dotenv()  # ensure env vars exist BEFORE we decide how to connect
 
 
 # =========================== SSH Tunnel (optional) ============================
 _TUNNEL = None
 
 def maybe_start_tunnel():
+    """Start an SSH tunnel if USE_SSH_TUNNEL=1 in .env."""
     if os.getenv("USE_SSH_TUNNEL", "0") != "1":
         return
     if SSHTunnelForwarder is None:
-        print("⚠️  sshtunnel not installed; cannot start SSH tunnel.")
+        print("⚠️  sshtunnel not installed; cannot start SSH tunnel. Set USE_SSH_TUNNEL=0 or install sshtunnel.")
         return
 
     global _TUNNEL
@@ -58,6 +62,7 @@ def maybe_start_tunnel():
         local_bind_address=("127.0.0.1", local_port),
     )
     _TUNNEL.start()
+    # Point DB at the local tunnel
     os.environ["DB_HOST"] = "127.0.0.1"
     os.environ["DB_PORT"] = str(_TUNNEL.local_bind_port)
     print(f"🔗 SSH tunnel started → 127.0.0.1:{_TUNNEL.local_bind_port}")
@@ -73,6 +78,8 @@ def _stop_tunnel():
         _TUNNEL = None
 
 atexit.register(_stop_tunnel)
+
+# Start tunnel BEFORE creating the pool
 maybe_start_tunnel()
 
 
@@ -103,8 +110,9 @@ def query(sql, params=()):
         except: pass
 
 
-# ============================ Helper Logic ====================================
+# ============================ Helper Logic (yours) ============================
 def haversine(lat1, lon1, lat2, lon2):
+    """Great-circle distance (miles)."""
     R = 3958.8
     dLat = math.radians(lat2 - lat1)
     dLon = math.radians(lon2 - lon1)
@@ -115,6 +123,7 @@ def haversine(lat1, lon1, lat2, lon2):
     return R * c
 
 def find_shortest_route(start, items):
+    """Greedy nearest-neighbor route."""
     route = []
     current = start
     total_distance = 0.0
@@ -136,6 +145,7 @@ def demo_store_scoring():
         {"name": "CornerStore","inventory": ['banana','egg'],                                 "distance": 2},
     ]
     userItems = ['banana','egg','bread','sugar']
+
     best, results = None, []
     best_score = -1
     for s in stores:
@@ -152,6 +162,7 @@ def demo_store_scoring():
     return best, results
 
 def check_items_in_price_history(items):
+    """Check item names via product join (price_history.product_upc -> product.upc)."""
     if not items:
         return {"found": [], "missing": []}
     placeholders = ", ".join(["%s"] * len(items))
@@ -211,64 +222,88 @@ th,td{border-bottom:1px solid #eee;padding:8px;text-align:left}
 
 <script>
 const apiBase = window.location.origin;
-let map, markerGroup;
+let map = null, markerGroup = null;
 
-function colorMarker(color){
-  return new L.Icon({
-    iconUrl:`https://raw.githubusercontent.com/pointhi/leaflet-color-markers/master/img/marker-icon-${color}.png`,
-    shadowUrl:"https://unpkg.com/leaflet@1.9.4/dist/images/marker-shadow.png",
-    iconSize:[25,41], iconAnchor:[12,41], popupAnchor:[1,-34], shadowSize:[41,41]
-  });
-}
-
-function initMap(lat, lon) {
-  if (!map) {
-    map = L.map("map").setView([lat, lon], 13);
-    L.tileLayer("https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png", {
-      maxZoom: 19,
-      attribution: "&copy; OpenStreetMap contributors",
+function initMap(lat, lon){
+  const mapEl = document.getElementById('map');
+  if (!map){
+    map = L.map('map').setView([lat, lon], 13);
+    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+      maxZoom: 19, attribution: '&copy; OpenStreetMap contributors'
     }).addTo(map);
     markerGroup = L.layerGroup().addTo(map);
   } else {
     map.setView([lat, lon], 13);
     markerGroup.clearLayers();
   }
-  L.marker([lat, lon], { icon: colorMarker('blue'), title: "You" })
+  const user = L.marker([lat, lon], { title: 'You' })
     .addTo(markerGroup)
-    .bindPopup("<b>Your location</b>")
-    .openPopup();
+    .bindPopup('<b>Your location</b>');
+  user.openPopup();
+}
+
+function getInputs(){
+  const lat = parseFloat(document.getElementById('lat').value);
+  const lon = parseFloat(document.getElementById('lon').value);
+  return { lat, lon };
 }
 
 document.getElementById('geo').onclick = () => {
-  if (!navigator.geolocation) return alert("Geolocation not supported");
-  navigator.geolocation.getCurrentPosition(pos => {
-    const lat = pos.coords.latitude.toFixed(6);
-    const lon = pos.coords.longitude.toFixed(6);
-    document.getElementById('lat').value = lat;
-    document.getElementById('lon').value = lon;
-    initMap(lat, lon);
-  }, err => alert(err.message), { enableHighAccuracy:true, timeout:8000 });
+  // Geolocation only works on https, http://localhost or http://127.0.0.1
+  if (!navigator.geolocation){
+    alert('Geolocation not supported by this browser.');
+    const {lat, lon} = getInputs();
+    if (!isNaN(lat) && !isNaN(lon)) initMap(lat, lon);
+    return;
+  }
+  navigator.geolocation.getCurrentPosition(
+    pos => {
+      const lat = +pos.coords.latitude.toFixed(6);
+      const lon = +pos.coords.longitude.toFixed(6);
+      document.getElementById('lat').value = lat;
+      document.getElementById('lon').value = lon;
+      initMap(lat, lon);
+    },
+    err => {
+      console.warn('Geolocation error:', err.message);
+      alert(err.message + '\\nTip: open the app on http://127.0.0.1:5000 or enable location.');
+      const {lat, lon} = getInputs();
+      if (!isNaN(lat) && !isNaN(lon)) initMap(lat, lon);
+    },
+    { enableHighAccuracy:true, timeout:8000 }
+  );
 };
 
 document.getElementById('search').onclick = async () => {
-  const lat = document.getElementById('lat').value.trim();
-  const lon = document.getElementById('lon').value.trim();
+  const latStr = document.getElementById('lat').value.trim();
+  const lonStr = document.getElementById('lon').value.trim();
+  if (!latStr || !lonStr) return alert("Please provide lat/lon (or click 'Use my location').");
+
+  const lat = parseFloat(latStr), lon = parseFloat(lonStr);
+  if (!map) initMap(lat, lon);
+
   const items = document.getElementById('items').value.trim();
-  const radius = document.getElementById('radius').value.trim();
-  const lambda = document.getElementById('lambda').value.trim();
-  if (!lat || !lon) return alert("Please provide lat/lon (or click 'Use my location').");
+  const radius = document.getElementById('radius').value.trim() || '10';
+  const lambda = document.getElementById('lambda').value.trim() || '0.5';
+
   const url = new URL(apiBase + '/api/search');
   url.searchParams.set('lat', lat); url.searchParams.set('lon', lon);
   if (items) url.searchParams.set('items', items);
-  url.searchParams.set('radius_miles', radius || '10');
-  url.searchParams.set('lambda_per_mile', lambda || '0.5');
-  const res = await fetch(url); const data = await res.json();
+  url.searchParams.set('radius_miles', radius);
+  url.searchParams.set('lambda_per_mile', lambda);
+
+  const res = await fetch(url);
+  const data = await res.json();
   render(data);
 };
 
 function render(data){
   const el = document.getElementById('result');
-  if (data.error) { el.innerHTML = `<div class="card">Error: ${data.error}</div>`; return; }
+  if (data.error){
+    el.innerHTML = `<div class="card">Error: ${data.error}</div>`;
+    return;
+  }
+
   let html = '';
   if (data.best){
     const b = data.best;
@@ -293,44 +328,36 @@ function render(data){
   }
   el.innerHTML = html;
 
-  if (!map) {
-    const lat = parseFloat(document.getElementById('lat').value);
-    const lon = parseFloat(document.getElementById('lon').value);
-    initMap(lat, lon);
-  }
-  markerGroup.clearLayers();
+  if (map && markerGroup){
+    markerGroup.clearLayers();
+    const userLat = parseFloat(document.getElementById('lat').value);
+    const userLon = parseFloat(document.getElementById('lon').value);
+    L.marker([userLat, userLon], { title: 'You' })
+      .addTo(markerGroup)
+      .bindPopup('<b>Your location</b>');
 
-  const userLat = parseFloat(document.getElementById('lat').value);
-  const userLon = parseFloat(document.getElementById('lon').value);
-  L.marker([userLat, userLon], { icon: colorMarker('blue'), title: "You" })
-    .addTo(markerGroup)
-    .bindPopup("<b>Your location</b>");
-
-  if (rows.length){
-    const best = data.best ? data.best.store_id : null;
-    for (const s of rows){
-      const color = (s.store_id === best) ? 'green' : 'red';
-      L.marker([s.lat, s.lon], { icon: colorMarker(color), title: s.store_name })
-        .addTo(markerGroup)
-        .bindPopup(`<b>${s.store_name}</b><br>${s.distance_miles.toFixed(2)} mi<br>$${(s.total_price||0).toFixed(2)}`);
+    if (rows.length){
+      const best = data.best ? data.best.store_id : null;
+      for (const s of rows){
+        const m = L.marker([s.lat, s.lon], { title: s.store_name }).addTo(markerGroup);
+        m.bindPopup(`<b>${s.store_name}</b><br>${s.distance_miles.toFixed(2)} mi<br>$${(s.total_price||0).toFixed(2)}`);
+        if (s.store_id === best) m.setZIndexOffset(1000);
+      }
+      const bounds = L.latLngBounds();
+      markerGroup.eachLayer(l => bounds.extend(l.getLatLng()));
+      map.fitBounds(bounds, { padding: [50, 50] });
     }
-  }
-
-  if (markerGroup.getLayers().length > 0) {
-    const bounds = L.latLngBounds();
-    markerGroup.eachLayer(l => bounds.extend(l.getLatLng()));
-    map.fitBounds(bounds, { padding: [50, 50] });
   }
 }
 </script>
-</body></html>
-"""
-
+  </body></html>
+           """
 app = Flask(__name__)
 CORS(app)
 
 @app.get("/")
 def root():
+    # Serve ./index.html if present, else a built-in page so this file is standalone
     if Path("index.html").exists():
         return send_from_directory(".", "index.html")
     return Response(INDEX_FALLBACK, mimetype="text/html")
@@ -353,9 +380,9 @@ def api_search():
     except Exception:
         return jsonify({"error": "lat and lon are required floats"}), 400
 
+    # tokens user typed, lowercased
     items_raw = request.args.get("items", "")
-    items = [i.strip() for i in items_raw.split(",") if i.strip()]
-    items_lower = [i.lower() for i in items]
+    items_tokens = [i.strip().lower() for i in items_raw.split(",") if i.strip()]
 
     radius_miles = float(request.args.get("radius_miles", "10"))
     lambda_per_mile = float(request.args.get("lambda_per_mile", "0.5"))
@@ -376,60 +403,72 @@ def api_search():
         WHERE ST_Distance_Sphere(s.location, POINT(%s,%s)) <= %s
     """
     params = [lon, lat, lon, lat, radius_m]
-    if items:
-        placeholders = ", ".join(["%s"] * len(items))
-        base_sql += f" AND p.name IN ({placeholders})"
-        params.extend(items)
+
+    # fuzzy name match so "bread" finds "White Bread"
+    if items_tokens:
+        likes = " OR ".join(["LOWER(p.name) LIKE %s"] * len(items_tokens))
+        base_sql += f" AND ({likes})"
+        params.extend([f"%{t}%" for t in items_tokens])
 
     rows = query(base_sql, params)
 
+    # Aggregate cheapest price per requested token per store
     stores = {}
     for r in rows:
         sid = r["id"]
-        if sid not in stores:
-            stores[sid] = {
-                "store_id": sid,
-                "store_name": r["name"],
-                "lat": float(r["latitude"]),
-                "lon": float(r["longitude"]),
-                "distance_miles": float(r["meters"]) / 1609.34,
-                "items": {},
-            }
-        if r["item_name"] and r["price"] is not None:
-            k = r["item_name"].lower()
-            price = float(r["price"])
-            prev = stores[sid]["items"].get(k)
-            if prev is None or price < prev:
-                stores[sid]["items"][k] = price
+        s = stores.setdefault(sid, {
+            "store_id": sid,
+            "store_name": r["name"],
+            "lat": float(r["latitude"]),
+            "lon": float(r["longitude"]),
+            "distance_miles": float(r["meters"]) / 1609.34,
+            "items": {},  # token -> min price
+        })
+        item_name = (r["item_name"] or "").lower()
+        price = r["price"]
+        if item_name and price is not None and items_tokens:
+            for token in items_tokens:
+                if token in item_name:
+                    prev = s["items"].get(token)
+                    pval = float(price)
+                    if prev is None or pval < prev:
+                        s["items"][token] = pval
 
+    # Build results and scores
     results = []
     for s in stores.values():
-        if items:
-            missing = [n for n in items_lower if n not in s["items"]]
-            total = sum(s["items"][n] for n in items_lower if n in s["items"])
+        if items_tokens:
+            missing = [t for t in items_tokens if t not in s["items"]]
+            total = sum(s["items"][t] for t in items_tokens if t in s["items"])
         else:
             missing, total = [], 0.0
-
-        s["items_found"] = len(items_lower) - len(missing)
+        s["items_found"] = len(items_tokens) - len(missing)
         s["items_missing"] = missing
-        s["total_price"]  = round(total, 2)
+        s["total_price"] = round(total, 2)
         s["score"] = round(s["total_price"] + lambda_per_mile * s["distance_miles"], 2)
         results.append(s)
 
-    if items:
+    # Prefer stores with all items, then sort by total then distance
+    if items_tokens:
         full = [s for s in results if not s["items_missing"]]
         partial = [s for s in results if s["items_missing"]]
     else:
         full, partial = results, []
 
     full.sort(key=lambda s: (s["total_price"], s["distance_miles"]))
-    partial.sort(key=lambda s: (len(s["items_missing"]), s["total_price"] or 1e9, s["distance_miles"]))
+    partial.sort(key=lambda s: (len(s["items_missing"]),
+                                s["total_price"] or 1e9, s["distance_miles"]))
 
     return jsonify({
-        "query": {"lat": lat, "lon": lon, "radius_miles": radius_miles,
-                  "items": items, "lambda_per_mile": lambda_per_mile},
+        "query": {
+            "lat": lat, "lon": lon,
+            "radius_miles": radius_miles,
+            "items": items_tokens,
+            "lambda_per_mile": lambda_per_mile
+        },
         "best": (full[0] if full else (partial[0] if partial else None)),
-        "stores_full": full, "stores_partial": partial
+        "stores_full": full,
+        "stores_partial": partial
     })
 
 @app.get("/api/check-items")
@@ -471,9 +510,9 @@ def _print_db_target():
 def _db_smoke():
     try:
         rows = query("SELECT 1 AS ok", ())
-        print("DB OK", rows)
+        print("✅ DB OK", rows)
     except Exception as e:
-        print("DB FAILED:", e)
+        print("❌ DB FAILED:", e)
 
 if __name__ == "__main__":
     import argparse
@@ -481,37 +520,46 @@ if __name__ == "__main__":
     sub = parser.add_subparsers(dest="cmd")
 
     sub.add_parser("web", help="Run the web server (default)")
-    p_check = sub.add_parser("check-items", help="Console: check item names")
+
+    p_check = sub.add_parser("check-items", help="Console: check item names in price_history via product join")
     p_check.add_argument("--items", required=True, help="Comma-separated list, e.g. 'banana,egg,bread'")
+
     sub.add_parser("demo-scoring", help="Console: run demo store scoring")
     p_sim = sub.add_parser("sim-route", help="Console: simulate route + gas")
     p_sim.add_argument("--lat", type=float, required=True)
     p_sim.add_argument("--lon", type=float, required=True)
     p_sim.add_argument("--n", type=int, default=5)
     p_sim.add_argument("--gas", type=float, default=0.05)
+
     sub.add_parser("db-check", help="Console: simple DB health check")
 
     args = parser.parse_args()
     cmd = args.cmd or "web"
 
+    # Sanity print
     _print_db_target()
 
     if cmd == "web":
+        # quick DB smoke on startup
         _db_smoke()
+        # 0.0.0.0 so teammates on your LAN can access http://<your-ip>:5000
         app.run(host=os.getenv("HOST", "0.0.0.0"),
                 port=int(os.getenv("PORT", "5000")),
                 debug=True, use_reloader=False)
+
     elif cmd == "check-items":
         items = [i.strip() for i in args.items.split(",") if i.strip()]
         res = check_items_in_price_history(items)
         print("Found:", res["found"])
         print("Missing:", res["missing"])
+
     elif cmd == "demo-scoring":
         best, results = demo_store_scoring()
         print("=== Demo store scoring ===")
         for r in results:
             print(r)
         print("Best:", best)
+
     elif cmd == "sim-route":
         start = (args.lat, args.lon)
         items = [(random.uniform(-90, 90), random.uniform(-180, 180)) for _ in range(args.n)]
@@ -519,6 +567,6 @@ if __name__ == "__main__":
         gas_used = total * args.gas
         print("Route:", route)
         print(f"Total distance: {total:.2f} mi   Gas used: {gas_used:.2f} gal")
+
     elif cmd == "db-check":
         _db_smoke()
-
