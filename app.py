@@ -1,6 +1,6 @@
 # app.py — unified web app + SSH tunnel + DB pool + console helpers + map UI
 # -----------------------------------------------------------------------------
-#  Everyone uses http://10.0.0.118:5000  (http, not https)
+# 
 #
 # Modes:
 #   Web server (default):      python app.py
@@ -109,9 +109,25 @@ def _db_config():
         print("   Make sure your .env has DB_USER, DB_PASSWORD, DB_NAME.")
     return cfg
 
-pool = pooling.MySQLConnectionPool(pool_name="dbpool", pool_size=5, **_db_config())
+_pool = None
+
+def _get_pool():
+    """Lazily create the MySQL connection pool so the app can start even if env is incomplete."""
+    global _pool
+    if _pool is None:
+        cfg = _db_config()
+        try:
+            _pool = pooling.MySQLConnectionPool(pool_name="dbpool", pool_size=5, **cfg)
+        except Error as e:
+            # Keep None so endpoints can return a JSON error instead of crashing the app.
+            print("❌ Failed to create DB pool:", e)
+            _pool = None
+    return _pool
 
 def query(sql, params=()):
+    pool = _get_pool()
+    if pool is None:
+        raise RuntimeError("Database pool is not available. Check DB env vars / tunnel / connectivity.")
     conn = pool.get_connection()
     try:
         cur = conn.cursor(dictionary=True)
@@ -459,7 +475,7 @@ INDEX_FALLBACK = """<!doctype html>
     allItems.forEach(name=>{
       const id=`chk_${name.replace(/\\s+/g,'_')}`;
       const row=document.createElement('div');
-      row.innerHTML=\`<label><input type="checkbox" id="\${id}" value="\${name}" \${selectedSet.has(name)?'checked':''}> \${name}</label>\`;
+      row.innerHTML=`<label><input type="checkbox" id="${id}" value="${name}" ${selectedSet.has(name)?'checked':''}> ${name}</label>`;
       row.querySelector('input').addEventListener('change',e=>{
         if(e.target.checked) selectedSet.add(name); else selectedSet.delete(name);
       });
@@ -519,7 +535,7 @@ INDEX_FALLBACK = """<!doctype html>
     try{
       const res=await fetch(url);
       const data=await res.json();
-      window._rowsCache = (data.stores_full||[]).concat(data.stores_partial||[]); // for compare wiring
+      window._rowsCache = (data.stores_full||[]).concat(data.stores_partial||[]);
       render(data);
     }catch(e){ console.error(e); alert('Search failed. Check console for details.'); }
     finally{ setLoading(false); }
@@ -528,7 +544,7 @@ INDEX_FALLBACK = """<!doctype html>
 
   // render results + map markers
   function render(data){
-    if(data.error){ $bestWrap.style.display='block'; $bestWrap.innerHTML=\`<div class="card">Error: \${data.error}</div>\`; $tableWrap.style.display='none'; return; }
+    if(data.error){ $bestWrap.style.display='block'; $bestWrap.innerHTML=`<div class="card">Error: ${data.error}</div>`; $tableWrap.style.display='none'; return; }
 
     const rows=(data.stores_full||[]).concat(data.stores_partial||[]);
     renderBest(data.best); renderTable(rows, data.best ? data.best.store_id : null);
@@ -543,7 +559,7 @@ INDEX_FALLBACK = """<!doctype html>
         const bounds=L.latLngBounds();
         rows.forEach(s=>{
           const m=L.marker([s.lat,s.lon],{title:s.store_name}).addTo(markerGroup);
-          m.bindPopup(\`<b>\${s.store_name}</b><br>\${s.distance_miles.toFixed(2)} mi<br>$\${(s.total_price||0).toFixed(2)}\`);
+          m.bindPopup(`<b>${s.store_name}</b><br>${s.distance_miles.toFixed(2)} mi<br>$${(s.total_price||0).toFixed(2)}`);
           if(data.best && s.store_id===data.best.store_id) m.setZIndexOffset(1000);
           currentMarkersById.set(s.store_id, m); bounds.extend(m.getLatLng());
           m.on('mouseover',()=>highlightRow(s.store_id,true));
@@ -558,26 +574,26 @@ INDEX_FALLBACK = """<!doctype html>
   function renderBest(best){
     if(!best){ $bestWrap.style.display='none'; return; }
     $bestWrap.style.display='block';
-    $bestWrap.innerHTML = \`
+    $bestWrap.innerHTML = `
       <div class="result-header">
-        <h3 style="margin:0">\${best.store_name}</h3>
-        <span class="chip pill"><b>\${best.distance_miles.toFixed(2)} mi</b> away</span>
-        <span class="chip pill"><b>$\${(best.total_price||0).toFixed(2)}</b> total</span>
-        <span class="chip pill"><b>\${best.score.toFixed(2)}</b> score</span>
+        <h3 style="margin:0">${best.store_name}</h3>
+        <span class="chip pill"><b>${best.distance_miles.toFixed(2)} mi</b> away</span>
+        <span class="chip pill"><b>$${(best.total_price||0).toFixed(2)}</b> total</span>
+        <span class="chip pill"><b>${best.score.toFixed(2)}</b> score</span>
       </div>
-      \${Array.isArray(best.items_missing) && best.items_missing.length ? \`<div class="muted" style="margin-top:6px">Missing: \${best.items_missing.join(', ')}</div>\` : ''}\`;
+      ${Array.isArray(best.items_missing) && best.items_missing.length ? `<div class="muted" style="margin-top:6px">Missing: ${best.items_missing.join(', ')}</div>` : ''}`;
   }
   function renderTable(rows, bestId){
     const $tbody=document.getElementById('resultBody');
     $tbody.innerHTML=''; rows.forEach(s=>{
       const tr=document.createElement('tr'); tr.dataset.sid=s.store_id;
-      tr.innerHTML=\`
-        <td><input type="checkbox" class="cmp" data-sid="\${s.store_id}"></td>
-        <td>\${s.store_name}\${s.city? \` <span class="muted">· \${s.city}</span>\`:''}</td>
-        <td>\${s.distance_miles.toFixed(2)} mi</td>
-        <td>$\${(s.total_price||0).toFixed(2)}</td>
-        <td><span class="chip">\${s.items_found}</span></td>
-        <td>\${(s.items_missing||[]).join(', ')}</td>\`;
+      tr.innerHTML=`
+        <td><input type="checkbox" class="cmp" data-sid="${s.store_id}"></td>
+        <td>${s.store_name}${s.city? ` <span class="muted">· ${s.city}</span>`:''}</td>
+        <td>${s.distance_miles.toFixed(2)} mi</td>
+        <td>$${(s.total_price||0).toFixed(2)}</td>
+        <td><span class="chip">${s.items_found}</span></td>
+        <td>${(s.items_missing||[]).join(', ')}</td>`;
       if(s.store_id===bestId) tr.classList.add('highlight');
       tr.addEventListener('mouseenter',()=>{ const m=currentMarkersById.get(s.store_id); if(m){ m.openPopup(); } highlightRow(s.store_id,true); });
       tr.addEventListener('mouseleave',()=>highlightRow(s.store_id,false));
@@ -585,8 +601,8 @@ INDEX_FALLBACK = """<!doctype html>
     });
     document.getElementById('tableWrap').style.display = rows.length ? 'block' : 'none';
   }
-  function highlightRow(sid,on){ const row=document.querySelector(\`tr[data-sid="\${sid}"]\`); if(row) row.classList.toggle('highlight', on); }
-  function scrollToRow(sid){ const row=document.querySelector(\`tr[data-sid="\${sid}"]\`); if(!row) return; row.scrollIntoView({behavior:'smooth',block:'center'}); row.classList.add('highlight'); setTimeout(()=>row.classList.remove('highlight'),1200); }
+  function highlightRow(sid,on){ const row=document.querySelector(`tr[data-sid="${sid}"]`); if(row) row.classList.toggle('highlight', on); }
+  function scrollToRow(sid){ const row=document.querySelector(`tr[data-sid="${sid}"]`); if(!row) return; row.scrollIntoView({behavior:'smooth',block:'center'}); row.classList.add('highlight'); setTimeout(()=>row.classList.remove('highlight'),1200); }
 
   // instant filter
   document.getElementById('resultFilter').addEventListener('input', ()=>{ const q=document.getElementById('resultFilter').value.trim().toLowerCase();
@@ -643,8 +659,11 @@ def api_items():
     """
     params.append(limit)
 
-    rows = query(sql, tuple(params))
-    return jsonify([r["item_name"] for r in rows])
+    try:
+        rows = query(sql, tuple(params))
+        return jsonify([r["item_name"] for r in rows])
+    except Exception as e:
+        return jsonify({"error": f"DB error: {e}"}), 500
 
 @app.get("/healthz")
 def health():
@@ -655,6 +674,8 @@ def health():
     except Error as e:
         return jsonify({"ok": False, "error": str(e),
                         "host": os.getenv("DB_HOST"), "port": int(os.getenv("DB_PORT", "3306"))}), 500
+    except Exception as e:
+        return jsonify({"ok": False, "error": str(e)}), 500
 
 @app.get("/api/search")
 def api_search():
@@ -667,16 +688,18 @@ def api_search():
     items_raw = request.args.get("items", "")
     items_tokens = [i.strip().lower() for i in items_raw.split(",") if i.strip()]
 
-    radius_miles = float(request.args.get("radius_miles", "10"))
-    lambda_per_mile = float(request.args.get("lambda_per_mile", "0.5"))
+    try:
+        radius_miles = float(request.args.get("radius_miles", "10"))
+        lambda_per_mile = float(request.args.get("lambda_per_mile", "0.5"))
+    except Exception:
+        return jsonify({"error": "radius_miles and lambda_per_mile must be numbers"}), 400
+
     radius_m = radius_miles * 1609.34
 
     base_sql = """
         SELECT
             s.id,
             s.name,
-            -- s.address,         -- <- OPTIONAL: uncomment if your schema has it
-            -- s.city,            -- <- OPTIONAL: uncomment if your schema has it
             ST_Y(s.location) AS latitude,
             ST_X(s.location) AS longitude,
             ST_Distance_Sphere(s.location, POINT(%s,%s)) AS meters,
@@ -694,7 +717,10 @@ def api_search():
         base_sql += f" AND ({likes})"
         params.extend([f"%{t}%" for t in items_tokens])
 
-    rows = query(base_sql, params)
+    try:
+        rows = query(base_sql, params)
+    except Exception as e:
+        return jsonify({"error": f"DB error: {e}"}), 500
 
     # Aggregate cheapest price per token per store
     stores = {}
@@ -703,8 +729,6 @@ def api_search():
         s = stores.setdefault(sid, {
             "store_id": sid,
             "store_name": r["name"],
-            # "address": r.get("address"),   # if enabled above
-            # "city": r.get("city"),         # if enabled above
             "lat": float(r["latitude"]),
             "lon": float(r["longitude"]),
             "distance_miles": float(r["meters"]) / 1609.34,
@@ -759,7 +783,10 @@ def api_search():
 def api_check_items():
     items_raw = request.args.get("items", "")
     items = [i.strip() for i in items_raw.split(",") if i.strip()]
-    return jsonify(check_items_in_price_history(items))
+    try:
+        return jsonify(check_items_in_price_history(items))
+    except Exception as e:
+        return jsonify({"error": f"DB error: {e}"}), 500
 
 @app.get("/api/demo-scoring")
 def api_demo_scoring():
