@@ -180,8 +180,10 @@ def check_items_in_price_history(items):
 
 # ============================ Flask App & Routes ==============================
 INDEX_FALLBACK = """<!doctype html>
-<html lang="en"><head>
-<meta charset="utf-8"/><meta name="viewport" content="width=device-width,initial-scale=1"/>
+<html lang="en">
+<head>
+<meta charset="utf-8"/>
+<meta name="viewport" content="width=device-width,initial-scale=1"/>
 <title>Closest & Cheapest</title>
 
 <link
@@ -195,37 +197,106 @@ INDEX_FALLBACK = """<!doctype html>
 ></script>
 
 <style>
-body{font-family:system-ui,Arial,sans-serif;margin:24px;max-width:900px}
-.row{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:12px}
-input,button{padding:8px;font-size:15px}
-.card{border:1px solid #ddd;border-radius:8px;padding:12px;margin:8px 0}
-table{width:100%;border-collapse:collapse}
-th,td{border-bottom:1px solid #eee;padding:8px;text-align:left}
-.muted{color:#666}
-#map{height:400px;margin-top:16px;border-radius:8px;}
+body {
+  font-family: system-ui, Arial, sans-serif;
+  margin: 24px;
+  max-width: 900px;
+}
+.row {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+  margin-bottom: 12px;
+}
+input, button {
+  padding: 8px;
+  font-size: 15px;
+}
+button { cursor: pointer; }
+.card {
+  border: 1px solid #ddd;
+  border-radius: 8px;
+  padding: 12px;
+  margin: 8px 0;
+}
+table { width: 100%; border-collapse: collapse; }
+th, td { border-bottom: 1px solid #eee; padding: 8px; text-align: left; }
+.muted { color: #666; }
+#map { height: 400px; margin-top: 16px; border-radius: 8px; }
+
+/* Modal */
+.modal {
+  display: none;
+  position: fixed;
+  inset: 0;
+  background: rgba(0,0,0,0.5);
+  justify-content: center;
+  align-items: center;
+  z-index: 999;
+}
+.modal-content {
+  background: #fff;
+  border-radius: 8px;
+  padding: 20px;
+  max-height: 80vh;
+  overflow: auto;
+  min-width: 320px;
+}
+#itemList {
+  max-height: 60vh;
+  overflow-y: auto;
+  border: 1px solid #eee;
+  padding: 6px;
+}
+#itemList label { display: block; padding: 4px 0; cursor: pointer; }
+#selectItemsBtn {
+  padding: 8px 12px; background: #007bff; color: white; border: none; border-radius: 4px;
+}
+#selectItemsBtn:hover { background: #005dc1; }
 </style>
-</head><body>
+</head>
+<body>
 <h1>Find the closest & cheapest store</h1>
+
 <div class="row">
   <button id="geo">Use my location</button>
   <input id="lat" type="number" step="any" placeholder="Latitude"/>
   <input id="lon" type="number" step="any" placeholder="Longitude"/>
 </div>
+
 <div class="row">
-  <input id="items" style="min-width:380px" placeholder="Items (comma-separated): banana, egg, bread"/>
+  <button id="selectItemsBtn">Select items</button>
+  <div id="selectedItems" class="muted">(none)</div>
+</div>
+
+<div class="row">
   <input id="radius" type="number" step="0.1" value="10" style="width:120px"/> miles radius
   <input id="lambda" type="number" step="0.1" value="0.5" style="width:120px"/> $/mile weight
   <button id="search">Search</button>
 </div>
+
 <div id="map"></div>
 <div id="result"></div>
+
+<!-- Item Picker Modal -->
+<div id="itemModal" class="modal">
+  <div class="modal-content">
+    <h2>Select items</h2>
+    <input id="itemSearch" placeholder="Search items..." style="width:100%;padding:6px;margin-bottom:10px;">
+    <div id="itemList"></div>
+    <div style="margin-top:12px;text-align:right;">
+      <button id="cancelSelect">Cancel</button>
+      <button id="confirmSelect">Use selected</button>
+    </div>
+  </div>
+</div>
 
 <script>
 const apiBase = window.location.origin;
 let map = null, markerGroup = null;
 
+// Map + geolocation
 function initMap(lat, lon){
-  const mapEl = document.getElementById('map');
   if (!map){
     map = L.map('map').setView([lat, lon], 13);
     L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
@@ -236,10 +307,7 @@ function initMap(lat, lon){
     map.setView([lat, lon], 13);
     markerGroup.clearLayers();
   }
-  const user = L.marker([lat, lon], { title: 'You' })
-    .addTo(markerGroup)
-    .bindPopup('<b>Your location</b>');
-  user.openPopup();
+  L.marker([lat, lon], { title: 'You' }).addTo(markerGroup).bindPopup('<b>Your location</b>').openPopup();
 }
 
 function getInputs(){
@@ -249,7 +317,6 @@ function getInputs(){
 }
 
 document.getElementById('geo').onclick = () => {
-  // Geolocation only works on https, http://localhost or http://127.0.0.1
   if (!navigator.geolocation){
     alert('Geolocation not supported by this browser.');
     const {lat, lon} = getInputs();
@@ -274,6 +341,67 @@ document.getElementById('geo').onclick = () => {
   );
 };
 
+// Item picker
+const selectBtn = document.getElementById('selectItemsBtn');
+const modal = document.getElementById('itemModal');
+const itemListEl = document.getElementById('itemList');
+const selectedItemsEl = document.getElementById('selectedItems');
+const itemSearch = document.getElementById('itemSearch');
+const cancelBtn = document.getElementById('cancelSelect');
+const confirmBtn = document.getElementById('confirmSelect');
+
+let allItems = [];
+let selectedSet = new Set();
+
+async function loadItems(q = '') {
+  const url = new URL('/api/items', window.location.origin);
+  if (q) url.searchParams.set('q', q);
+  const res = await fetch(url);
+  allItems = await res.json();
+  renderItemList();
+}
+
+function renderItemList() {
+  itemListEl.innerHTML = '';
+  allItems.forEach(name => {
+    const id = `chk_${name.replace(/\s+/g, '_')}`;
+    const row = document.createElement('div');
+    row.innerHTML = `
+      <label><input type="checkbox" id="${id}" value="${name}" ${selectedSet.has(name) ? 'checked' : ''}>
+        ${name}</label>
+    `;
+    row.querySelector('input').addEventListener('change', e => {
+      if (e.target.checked) selectedSet.add(name);
+      else selectedSet.delete(name);
+    });
+    itemListEl.appendChild(row);
+  });
+}
+
+selectBtn.onclick = async () => {
+  modal.style.display = 'flex';
+  await loadItems();
+  itemSearch.value = '';
+  itemSearch.focus();
+};
+
+cancelBtn.onclick = () => { modal.style.display = 'none'; };
+confirmBtn.onclick = () => {
+  modal.style.display = 'none';
+  selectedItemsEl.textContent = [...selectedSet].join(', ') || '(none)';
+};
+
+itemSearch.addEventListener('input', () => {
+  const q = itemSearch.value.trim();
+  clearTimeout(window._itemSearchTimer);
+  window._itemSearchTimer = setTimeout(() => loadItems(q), 250);
+});
+
+function getSelectedItemsCSV() {
+  return [...selectedSet].join(',');
+}
+
+// Search
 document.getElementById('search').onclick = async () => {
   const latStr = document.getElementById('lat').value.trim();
   const lonStr = document.getElementById('lon').value.trim();
@@ -282,12 +410,13 @@ document.getElementById('search').onclick = async () => {
   const lat = parseFloat(latStr), lon = parseFloat(lonStr);
   if (!map) initMap(lat, lon);
 
-  const items = document.getElementById('items').value.trim();
+  const items = getSelectedItemsCSV();
   const radius = document.getElementById('radius').value.trim() || '10';
   const lambda = document.getElementById('lambda').value.trim() || '0.5';
 
   const url = new URL(apiBase + '/api/search');
-  url.searchParams.set('lat', lat); url.searchParams.set('lon', lon);
+  url.searchParams.set('lat', lat);
+  url.searchParams.set('lon', lon);
   if (items) url.searchParams.set('items', items);
   url.searchParams.set('radius_miles', radius);
   url.searchParams.set('lambda_per_mile', lambda);
@@ -350,7 +479,9 @@ function render(data){
   }
 }
 </script>
-  </body></html>
+</body>
+</html>
+
            """
 app = Flask(__name__)
 CORS(app)
