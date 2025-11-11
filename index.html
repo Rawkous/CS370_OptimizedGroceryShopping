@@ -1,117 +1,332 @@
-<!doctype html>
+<<!doctype html>
 <html lang="en">
 <head>
-  <meta charset="utf-8"/>
-  <meta name="viewport" content="width=device-width,initial-scale=1"/>
-  <title>Closest & Cheapest</title>
+<meta charset="utf-8"/>
+<meta name="viewport" content="width=device-width,initial-scale=1"/>
+<title>Closest & Cheapest</title>
 
-  <!-- Leaflet (map) -->
-  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" crossorigin=""/>
-  <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" crossorigin=""></script>
+<link
+  rel="stylesheet"
+  href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css"
+  crossorigin=""
+/>
+<script
+  src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js"
+  crossorigin=""
+></script>
 
-  <style>
-    :root{
-      --bg:#0f172a;            /* slate-900 */
-      --panel:#111827;         /* gray-900 */
-      --muted:#9ca3af;         /* gray-400 */
-      --border:#1f2937;        /* gray-800 */
-      --text:#e5e7eb;          /* gray-200 */
-      --accent:#22c55e;        /* green-500 */
-      --accent-2:#60a5fa;      /* blue-400 */
-      --card:#0b1220;
-      --chip:#0e1a30;
-    }
-    *{box-sizing:border-box}
-    body{
-      font-family: system-ui, -apple-system, Segoe UI, Roboto, Arial, sans-serif;
-      margin:0; background: radial-gradient(1200px 600px at 15% -10%, #16233f 0%, transparent 60%) ,
-                              radial-gradient(1000px 500px at 110% 10%, #132530 0%, transparent 60%) ,
-                              var(--bg);
-      color:var(--text);
-      min-height:100vh;
-    }
-    .container{max-width:1100px;margin:32px auto;padding:0 20px}
-    h1{
-      font-size: clamp(1.6rem, 1.2rem + 2vw, 2.2rem);
-      margin:0 0 16px;
-      font-weight:800;
-      letter-spacing:.3px;
-      text-shadow:0 1px 0 #000;
-    }
+<style>
+body {
+  font-family: system-ui, Arial, sans-serif;
+  margin: 24px;
+  max-width: 900px;
+}
+.row {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+  margin-bottom: 12px;
+}
+input, button {
+  padding: 8px;
+  font-size: 15px;
+}
+button {
+  cursor: pointer;
+}
+.card {
+  border: 1px solid #ddd;
+  border-radius: 8px;
+  padding: 12px;
+  margin: 8px 0;
+}
+table {
+  width: 100%;
+  border-collapse: collapse;
+}
+th, td {
+  border-bottom: 1px solid #eee;
+  padding: 8px;
+  text-align: left;
+}
+.muted { color: #666; }
+#map {
+  height: 400px;
+  margin-top: 16px;
+  border-radius: 8px;
+}
 
-    .panel{
-      background: linear-gradient(180deg, rgba(255,255,255,.015), rgba(255,255,255,.005));
-      border:1px solid var(--border);
-      border-radius:14px;
-      box-shadow: 0 10px 30px rgba(0,0,0,.35);
-      padding:14px;
-    }
-    .row{display:flex;gap:10px;flex-wrap:wrap;margin-bottom:12px}
-    input,button{
-      border-radius:10px;
-      border:1px solid var(--border);
-      background:#0b1220; color:var(--text);
-      padding:10px 12px; font-size:15px;
-      outline:none;
-    }
-    input::placeholder{color:#6b7280}
-    button{
-      background:linear-gradient(180deg, #1e293b, #0f172a);
-      border-color:#253041;
-      cursor:pointer;
-      transition:transform .08s ease, box-shadow .15s ease, background .2s ease;
-    }
-    button:hover{box-shadow:0 6px 16px rgba(34,197,94,.25)}
-    button:active{transform:translateY(1px)}
-    .btn-accent{
-      background:linear-gradient(180deg, var(--accent-2), #2563eb);
-      border-color:#1d4ed8;
-      color:white;
-    }
-
-    .card{background:var(--card);border:1px solid var(--border);border-radius:12px;padding:12px;margin:12px 0}
-    .muted{color:var(--muted)}
-
-    /* Map */
-    #map{height:420px;border-radius:12px;border:1px solid var(--border);margin:12px 0}
-
-    /* Table */
-    table{width:100%;border-collapse:collapse;margin-top:8px}
-    thead th{
-      text-align:left;
-      font-weight:700;
-      font-size:13px;
-      padding:10px;
-      color:#cbd5e1;
-      border-bottom:1px solid var(--border);
-      background:#0e1a30;
-      position:sticky; top:0;
-    }
-    td{
-      padding:10px; border-bottom:1px dashed #1c2434; font-size:14px;
-    }
-    tbody tr:hover{background:#0c1628}
-    .chip{
-      display:inline-block; padding:3px 8px; border-radius:999px;
-      background:var(--chip); color:#cbd5e1; border:1px solid #1b2a45; font-size:12px
-    }
-    .kpi{display:flex;gap:10px;flex-wrap:wrap}
-    .kpi span{padding:6px 10px;border-radius:8px;background:#0c1324;border:1px solid var(--border)}
-  </style>
+/* --- Modal Styles --- */
+.modal {
+  display: none;
+  position: fixed;
+  inset: 0;
+  background: rgba(0,0,0,0.5);
+  justify-content: center;
+  align-items: center;
+  z-index: 999;
+}
+.modal-content {
+  background: #fff;
+  border-radius: 8px;
+  padding: 20px;
+  max-height: 80vh;
+  overflow: auto;
+  min-width: 320px;
+}
+#itemList {
+  max-height: 60vh;
+  overflow-y: auto;
+  border: 1px solid #eee;
+  padding: 6px;
+}
+#itemList label {
+  display: block;
+  padding: 4px 0;
+  cursor: pointer;
+}
+#selectItemsBtn {
+  padding: 8px 12px;
+  background: #007bff;
+  color: white;
+  border: none;
+  border-radius: 4px;
+}
+#selectItemsBtn:hover {
+  background: #005dc1;
+}
+</style>
 </head>
 <body>
-  <div class="container">
-    <h1>Find the closest & cheapest store</h1>
+<h1>Find the closest & cheapest store</h1>
 
-    <div class="panel">
-      <div class="row">
-        <button id="geo" class="btn-accent">Use my location</button>
-        <input id="lat" type="number" step="any" placeholder="Latitude"/>
-        <input id="lon" type="number" step="any" placeholder="Longitude"/>
-        <button id="search">Search</button>
-      </div>
+<div class="row">
+  <button id="geo">Use my location</button>
+  <input id="lat" type="number" step="any" placeholder="Latitude"/>
+  <input id="lon" type="number" step="any" placeholder="Longitude"/>
+</div>
 
-      <div class="row">
+<div class="row">
+  <button id="selectItemsBtn">Select items</button>
+  <div id="selectedItems" class="muted">(none)</div>
+</div>
+
+<div class="row">
+  <input id="radius" type="number" step="0.1" value="10" style="width:120px"/> miles radius
+  <input id="lambda" type="number" step="0.1" value="0.5" style="width:120px"/> $/mile weight
+  <button id="search">Search</button>
+</div>
+
+<div id="map"></div>
+<div id="result"></div>
+
+<!-- Item Picker Modal -->
+<div id="itemModal" class="modal">
+  <div class="modal-content">
+    <h2>Select items</h2>
+    <input id="itemSearch" placeholder="Search items..." style="width:100%;padding:6px;margin-bottom:10px;">
+    <div id="itemList"></div>
+    <div style="margin-top:12px;text-align:right;">
+      <button id="cancelSelect">Cancel</button>
+      <button id="confirmSelect">Use selected</button>
+    </div>
+  </div>
+</div>
+
+<script>
+const apiBase = window.location.origin;
+let map = null, markerGroup = null;
+
+// ---------------- Geolocation + Map -----------------
+function initMap(lat, lon){
+  const mapEl = document.getElementById('map');
+  if (!map){
+    map = L.map('map').setView([lat, lon], 13);
+    L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+      maxZoom: 19, attribution: '&copy; OpenStreetMap contributors'
+    }).addTo(map);
+    markerGroup = L.layerGroup().addTo(map);
+  } else {
+    map.setView([lat, lon], 13);
+    markerGroup.clearLayers();
+  }
+  const user = L.marker([lat, lon], { title: 'You' })
+    .addTo(markerGroup)
+    .bindPopup('<b>Your location</b>');
+  user.openPopup();
+}
+
+function getInputs(){
+  const lat = parseFloat(document.getElementById('lat').value);
+  const lon = parseFloat(document.getElementById('lon').value);
+  return { lat, lon };
+}
+
+document.getElementById('geo').onclick = () => {
+  if (!navigator.geolocation){
+    alert('Geolocation not supported by this browser.');
+    const {lat, lon} = getInputs();
+    if (!isNaN(lat) && !isNaN(lon)) initMap(lat, lon);
+    return;
+  }
+  navigator.geolocation.getCurrentPosition(
+    pos => {
+      const lat = +pos.coords.latitude.toFixed(6);
+      const lon = +pos.coords.longitude.toFixed(6);
+      document.getElementById('lat').value = lat;
+      document.getElementById('lon').value = lon;
+      initMap(lat, lon);
+    },
+    err => {
+      console.warn('Geolocation error:', err.message);
+      alert(err.message + '\\nTip: open the app on http://127.0.0.1:5000 or enable location.');
+      const {lat, lon} = getInputs();
+      if (!isNaN(lat) && !isNaN(lon)) initMap(lat, lon);
+    },
+    { enableHighAccuracy:true, timeout:8000 }
+  );
+};
+
+// ---------------- Item Picker ------------------
+const selectBtn = document.getElementById('selectItemsBtn');
+const modal = document.getElementById('itemModal');
+const itemListEl = document.getElementById('itemList');
+const selectedItemsEl = document.getElementById('selectedItems');
+const itemSearch = document.getElementById('itemSearch');
+const cancelBtn = document.getElementById('cancelSelect');
+const confirmBtn = document.getElementById('confirmSelect');
+
+let allItems = [];
+let selectedSet = new Set();
+
+async function loadItems(q = '') {
+  const url = new URL('/api/items', window.location.origin);
+  if (q) url.searchParams.set('q', q);
+  const res = await fetch(url);
+  allItems = await res.json();
+  renderItemList();
+}
+
+function renderItemList() {
+  itemListEl.innerHTML = '';
+  allItems.forEach(name => {
+    const id = `chk_${name.replace(/\s+/g, '_')}`;
+    const row = document.createElement('div');
+    row.innerHTML = `
+      <label><input type="checkbox" id="${id}" value="${name}" ${selectedSet.has(name) ? 'checked' : ''}>
+        ${name}</label>
+    `;
+    row.querySelector('input').addEventListener('change', e => {
+      if (e.target.checked) selectedSet.add(name);
+      else selectedSet.delete(name);
+    });
+    itemListEl.appendChild(row);
+  });
+}
+
+selectBtn.onclick = async () => {
+  modal.style.display = 'flex';
+  await loadItems();
+  itemSearch.value = '';
+  itemSearch.focus();
+};
+
+cancelBtn.onclick = () => { modal.style.display = 'none'; };
+confirmBtn.onclick = () => {
+  modal.style.display = 'none';
+  selectedItemsEl.textContent = [...selectedSet].join(', ') || '(none)';
+};
+
+itemSearch.addEventListener('input', () => {
+  const q = itemSearch.value.trim();
+  clearTimeout(window._itemSearchTimer);
+  window._itemSearchTimer = setTimeout(() => loadItems(q), 250);
+});
+
+function getSelectedItemsCSV() {
+  return [...selectedSet].join(',');
+}
+
+// ---------------- Search Logic ------------------
+document.getElementById('search').onclick = async () => {
+  const latStr = document.getElementById('lat').value.trim();
+  const lonStr = document.getElementById('lon').value.trim();
+  if (!latStr || !lonStr) return alert("Please provide lat/lon (or click 'Use my location').");
+
+  const lat = parseFloat(latStr), lon = parseFloat(lonStr);
+  if (!map) initMap(lat, lon);
+
+  const items = getSelectedItemsCSV();
+  const radius = document.getElementById('radius').value.trim() || '10';
+  const lambda = document.getElementById('lambda').value.trim() || '0.5';
+
+  const url = new URL(apiBase + '/api/search');
+  url.searchParams.set('lat', lat);
+  url.searchParams.set('lon', lon);
+  if (items) url.searchParams.set('items', items);
+  url.searchParams.set('radius_miles', radius);
+  url.searchParams.set('lambda_per_mile', lambda);
+
+  const res = await fetch(url);
+  const data = await res.json();
+  render(data);
+};
+
+function render(data){
+  const el = document.getElementById('result');
+  if (data.error){
+    el.innerHTML = `<div class="card">Error: ${data.error}</div>`;
+    return;
+  }
+
+  let html = '';
+  if (data.best){
+    const b = data.best;
+    html += `<div class="card"><h3>Best store: ${b.store_name}</h3>
+      <div class="muted">${b.distance_miles.toFixed(2)} miles • Total $${b.total_price.toFixed(2)} • Score ${b.score.toFixed(2)}</div>
+      ${Array.isArray(b.items_missing) && b.items_missing.length ? `<div class="muted">Missing: ${b.items_missing.join(', ')}</div>` : ''}</div>`;
+  } else {
+    html += `<div class="card">No stores found in the selected radius.</div>`;
+  }
+
+  const rows = (data.stores_full||[]).concat(data.stores_partial||[]);
+  if (rows.length){
+    html += `<table><thead><tr><th>Store</th><th>Distance</th><th>Total</th><th>Items Found</th><th>Missing</th></tr></thead><tbody>`;
+    for (const s of rows){
+      html += `<tr><td>${s.store_name}</td>
+        <td>${s.distance_miles.toFixed(2)} mi</td>
+        <td>$${(s.total_price||0).toFixed(2)}</td>
+        <td>${s.items_found}</td>
+        <td>${(s.items_missing||[]).join(', ')}</td></tr>`;
+    }
+    html += `</tbody></table>`;
+  }
+  el.innerHTML = html;
+
+  if (map && markerGroup){
+    markerGroup.clearLayers();
+    const userLat = parseFloat(document.getElementById('lat').value);
+    const userLon = parseFloat(document.getElementById('lon').value);
+    L.marker([userLat, userLon], { title: 'You' })
+      .addTo(markerGroup)
+      .bindPopup('<b>Your location</b>');
+
+    if (rows.length){
+      const best = data.best ? data.best.store_id : null;
+      for (const s of rows){
+        const m = L.marker([s.lat, s.lon], { title: s.store_name }).addTo(markerGroup);
+        m.bindPopup(`<b>${s.store_name}</b><br>${s.distance_miles.toFixed(2)} mi<br>$${(s.total_price||0).toFixed(2)}`);
+        if (s.store_id === best) m.setZIndexOffset(1000);
+      }
+      const bounds = L.latLngBounds();
+      markerGroup.eachLayer(l => bounds.extend(l.getLatLng()));
+      map.fitBounds(bounds, { padding: [50, 50] });
+    }
+  }
+}
+</script>
+</body>
+</html>
         <input id="items" style="min-width:320px" placeholder="Items (comma-separated): banana, egg, bread"/>
         <input id="radius" type="number" step="0.1" value="10" style="width:120px" title="Miles radius"/>
         <span class="muted" style="align-self:center">miles radius</span>
@@ -281,3 +496,4 @@
   </script>
 </body>
 </html>
+
