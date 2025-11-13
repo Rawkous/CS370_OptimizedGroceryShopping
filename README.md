@@ -145,6 +145,9 @@ Integrate live API data from grocery chains (e.g., Kroger or Walmart APIs)
 
 Add user login and saved lists from the user_account schema
 
+Implement price trend analytics via the price_history table
+
+Add route optimization visualization using Mapbox Directions API
 
 
 
@@ -156,6 +159,3 @@ cd CS370_OptimizedGroceryShopping
 cp .env.example .env        # fill in DB + SSH settings
 make run                    # or: python3 -m venv .venv && .venv/bin/pip install -r requirements.txt && .venv/bin/python app.py
 
-Implement price trend analytics via the price_history table
-
-Add route optimization visualization using Mapbox Directions API
