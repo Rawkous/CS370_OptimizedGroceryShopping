@@ -11,13 +11,16 @@ def haversine(lat1, lon1, lat2, lon2):
     R = 3958.8
     dLat = math.radians(lat2 - lat1)
     dLon = math.radians(lon2 - lon1)
-    a = (math.sin(dLat/2)**2
-         + math.cos(math.radians(lat1)) * math.cos(math.radians(lat2))
-         * math.sin(dLon/2)**2)
+    a = (
+        math.sin(dLat / 2) ** 2
+        + math.cos(math.radians(lat1))
+        * math.cos(math.radians(lat2))
+        * math.sin(dLon / 2) ** 2
+    )
     c = 2 * math.atan2(math.sqrt(a), math.sqrt(1 - a))
     return R * c
 
-def find_shortest_route(start: Tuple[float,float], items: List[Tuple[float,float]]):
+def find_shortest_route(start: Tuple[float, float], items: List[Tuple[float, float]]):
     """Greedy nearest-neighbor route."""
     route = []
     current = start
@@ -35,12 +38,12 @@ def find_shortest_route(start: Tuple[float,float], items: List[Tuple[float,float
 # --- demo scoring ---
 def demo_store_scoring():
     stores = [
-        {"name": "Supermarket", "inventory": ['banana','egg','bread','soda','cookies','sugar'], "distance": 5},
-        {"name": "MiniMart",   "inventory": ['banana','milk','bread','chips'],                "distance": 3},
-        {"name": "OrganicShop","inventory": ['bread','sugar','apple','lettuce'],             "distance": 8},
-        {"name": "CornerStore","inventory": ['banana','egg'],                                 "distance": 2},
+        {"name": "Supermarket", "inventory": ['banana', 'egg', 'bread', 'soda', 'cookies', 'sugar'], "distance": 5},
+        {"name": "MiniMart",   "inventory": ['banana', 'milk', 'bread', 'chips'],                  "distance": 3},
+        {"name": "OrganicShop","inventory": ['bread', 'sugar', 'apple', 'lettuce'],               "distance": 8},
+        {"name": "CornerStore","inventory": ['banana', 'egg'],                                     "distance": 2},
     ]
-    userItems = ['banana','egg','bread','sugar']
+    userItems = ['banana', 'egg', 'bread', 'sugar']
 
     best, results = None, []
     best_score = -1
@@ -48,9 +51,11 @@ def demo_store_scoring():
         matches = set(s["inventory"]) & set(userItems)
         score = len(matches) / s["distance"] if s["distance"] else float("inf")
         row = {
-            "Store": s["name"], "Distance": s["distance"],
+            "Store": s["name"],
+            "Distance": s["distance"],
             "MatchedItems": sorted(list(matches)),
-            "MatchCount": len(matches), "Score": round(score, 3)
+            "MatchCount": len(matches),
+            "Score": round(score, 3),
         }
         results.append(row)
         if score > best_score:
@@ -80,7 +85,8 @@ def simulate_route(start_lat: float, start_lon: float, n: int = 5, gas_rate: flo
     gas_used = total_distance * gas_rate
     return {
         "start": {"lat": start_lat, "lon": start_lon},
-        "items": items, "route": route,
+        "items": items,
+        "route": route,
         "total_distance_miles": round(total_distance, 2),
-        "gas_used": round(gas_used, 2)
+        "gas_used": round(gas_used, 2),
     }
