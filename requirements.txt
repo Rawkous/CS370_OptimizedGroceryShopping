@@ -1,5 +1,6 @@
-Flask==3.0.0
-Flask-Cors==4.0.0
-python-dotenv==1.0.1
-mysql-connector-python==9.0.0
-sshtunnel==0.4.0
+Flask>=3.0,<4
+flask-cors>=4.0,<5
+python-dotenv>=1.0,<2
+mysql-connector-python>=9.0,<10
+sshtunnel>=0.4,<0.5
+paramiko>=2.12,<3  
