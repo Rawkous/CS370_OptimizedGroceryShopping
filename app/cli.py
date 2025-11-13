@@ -5,24 +5,33 @@ from dotenv import load_dotenv
 
 from .tunnel import maybe_start_tunnel
 from . import create_app
-from .db import query, db_smoke_ok
-from .logic import check_items_in_price_history, demo_store_scoring, simulate_route
+from .db import db_smoke_ok
+from .logic import (
+    check_items_in_price_history,
+    demo_store_scoring,
+    simulate_route,
+)
 
 def _print_db_target():
-    print(f"DB target → host={os.getenv('DB_HOST')} port={os.getenv('DB_PORT')} "
-          f"user={os.getenv('DB_USER')} db={os.getenv('DB_NAME')}")
+    print(
+        f"DB target → host={os.getenv('DB_HOST')} "
+        f"port={os.getenv('DB_PORT')} user={os.getenv('DB_USER')} db={os.getenv('DB_NAME')}"
+    )
 
 def main():
-    # Ensure env and (optional) tunnel are ready for *all* commands.
+    # Make env + tunnel available to all modes (tunnel is a no-op if disabled)
     load_dotenv()
     maybe_start_tunnel()
 
-    parser = argparse.ArgumentParser(description="Closest & Cheapest — multi-mode app")
+    parser = argparse.ArgumentParser(description="Closest & Cheapest — unified app")
     sub = parser.add_subparsers(dest="cmd")
 
     sub.add_parser("web", help="Run the web server (default)")
 
-    p_check = sub.add_parser("check-items", help="Console: check item names in price_history via product join")
+    p_check = sub.add_parser(
+        "check-items",
+        help="Console: check item names in price_history via product join",
+    )
     p_check.add_argument("--items", required=True, help="Comma-separated list, e.g. 'banana,egg,bread'")
 
     sub.add_parser("demo-scoring", help="Console: run demo store scoring")
@@ -41,11 +50,15 @@ def main():
     _print_db_target()
 
     if cmd == "web":
-        ok = db_smoke_ok()
+        # Print a quick diagnostic like the monolith did
+        print("✅ DB OK" if db_smoke_ok() else "❌ DB FAILED: see logs above")
         app = create_app()
-        app.run(host=os.getenv("HOST", "0.0.0.0"),
-                port=int(os.getenv("PORT", "5000")),
-                debug=True, use_reloader=False)
+        app.run(
+            host=os.getenv("HOST", "0.0.0.0"),
+            port=int(os.getenv("PORT", "5000")),
+            debug=True,
+            use_reloader=False,
+        )
 
     elif cmd == "check-items":
         items = [i.strip() for i in args.items.split(",") if i.strip()]
@@ -63,7 +76,10 @@ def main():
     elif cmd == "sim-route":
         out = simulate_route(args.lat, args.lon, args.n, args.gas)
         print("Route:", out["route"])
-        print(f"Total distance: {out['total_distance_miles']:.2f} mi   Gas used: {out['gas_used']:.2f} gal")
+        print(
+            f"Total distance: {out['total_distance_miles']:.2f} mi   "
+            f"Gas used: {out['gas_used']:.2f} gal"
+        )
 
     elif cmd == "db-check":
         print("✅ DB OK" if db_smoke_ok() else "❌ DB FAILED")
