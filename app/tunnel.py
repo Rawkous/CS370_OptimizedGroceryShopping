@@ -39,7 +39,7 @@ def maybe_start_tunnel():
 
     remote_host  = os.getenv("REMOTE_DB_HOST", "127.0.0.1")
     remote_port  = int(os.getenv("REMOTE_DB_PORT", "3306"))
-    local_port   = int(os.getenv("LOCAL_TUNNEL_PORT", "3307"))
+    local_port   = int(os.getenv("LOCAL_TUNNEL_PORT", "3307"))  # set 0 to auto-pick
 
     if not ssh_user or (not ssh_password and not ssh_pkey):
         print("❌ USE_SSH_TUNNEL=1 but SSH_USER and SSH_PASSWORD/SSH_PKEY not set; skipping tunnel.")
@@ -60,6 +60,7 @@ def maybe_start_tunnel():
         print(f"❌ Failed to start SSH tunnel: {e}")
         return
 
+    # Aim DB at the local forward
     os.environ["DB_HOST"] = "127.0.0.1"
     os.environ["DB_PORT"] = str(_TUNNEL.local_bind_port)
     print(f"🔗 SSH tunnel started → 127.0.0.1:{_TUNNEL.local_bind_port}")
