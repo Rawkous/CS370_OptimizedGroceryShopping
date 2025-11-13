@@ -1,23 +1,21 @@
 # app/__init__.py
-import os
-from pathlib import Path
 from flask import Flask
 from flask_cors import CORS
 from dotenv import load_dotenv
 
-from .tunnel import maybe_start_tunnel
-from .routes import api_bp, root_bp
-
-def create_app() -> Flask:
-    # Load env, then (optionally) start SSH tunnel so DB_* are rewritten if needed.
+def create_app():
+    # Load env first so config is available everywhere
     load_dotenv()
-    maybe_start_tunnel()
 
     app = Flask(__name__)
     CORS(app)
 
-    # Register routes
+    # Register all HTTP routes (root + /api/*)
     from .routes import register_routes
     register_routes(app)
-    
+
+    # Optionally start the SSH tunnel (idempotent; safe to call more than once)
+    from .tunnel import maybe_start_tunnel
+    maybe_start_tunnel()
+
     return app
