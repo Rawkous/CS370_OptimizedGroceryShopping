@@ -17,7 +17,7 @@ def create_app() -> Flask:
     CORS(app)
 
     # Register routes
-    app.register_blueprint(root_bp)  # "/" + fallback index
-    app.register_blueprint(api_bp, url_prefix="")  # /api/* and /healthz
-
+    from .routes import register_routes
+    register_routes(app)
+    
     return app
