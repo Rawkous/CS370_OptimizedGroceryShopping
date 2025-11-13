@@ -14,9 +14,15 @@ def _db_config():
         "autocommit": True,
         "connection_timeout": 10,
     }
-    missing = [k for k, v in (("DB_USER", cfg["user"]),
-                              ("DB_PASSWORD", cfg["password"]),
-                              ("DB_NAME", cfg["database"])) if not v]
+    missing = [
+        k
+        for k, v in (
+            ("DB_USER", cfg["user"]),
+            ("DB_PASSWORD", cfg["password"]),
+            ("DB_NAME", cfg["database"]),
+        )
+        if not v
+    ]
     if missing:
         print(f"❌ Missing required DB env vars: {', '.join(missing)}")
         print("   Make sure your .env has DB_USER, DB_PASSWORD, DB_NAME.")
@@ -43,10 +49,14 @@ def query(sql: str, params=()):
         cur.execute(sql, params)
         return cur.fetchall()
     finally:
-        try: cur.close()
-        except: pass
-        try: conn.close()
-        except: pass
+        try:
+            cur.close()
+        except:
+            pass
+        try:
+            conn.close()
+        except:
+            pass
 
 def db_smoke_ok() -> bool:
     try:
