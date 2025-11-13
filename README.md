@@ -1,5 +1,7 @@
 Overview
 
+// QUICK START AT THE BOTTOM //
+
 Project Title: Closest & Cheapest Store Finder
 Team: SDD_003
 Primary Modules:
@@ -129,19 +131,7 @@ Deployment Notes
 
 Run locally using:
 
-make install
-make run
-
-## Quickstart
-
-```bash
-git clone <your-repo>
-cd <repo>
-python -m venv .venv
-.\.venv\Scripts\pip install -r requirements.txt
-copy .env.example .env
-
-Application starts on: http://127.0.0.1:5000
+Application currently starts on: http://127.0.0.1:5000
 
 Database tunnel: blue.cs.sonoma.edu → localhost:3307
 
@@ -154,6 +144,17 @@ Future Enhancements
 Integrate live API data from grocery chains (e.g., Kroger or Walmart APIs)
 
 Add user login and saved lists from the user_account schema
+
+
+
+
+## Quickstart
+
+```bash
+git clone https://github.com/Rawkous/CS370_OptimizedGroceryShopping.git
+cd CS370_OptimizedGroceryShopping
+cp .env.example .env        # fill in DB + SSH settings
+make run                    # or: python3 -m venv .venv && .venv/bin/pip install -r requirements.txt && .venv/bin/python app.py
 
 Implement price trend analytics via the price_history table
 
