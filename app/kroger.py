@@ -1,152 +1,161 @@
 # app/kroger.py
-import base64, os, time
-from typing import Dict, Any, List, Optional
+from __future__ import annotations
+import base64, os, time, math
+from typing import Dict, Any, List, Tuple
 import requests
 
-KROGER_OAUTH_URL = "https://api.kroger.com/v1/connect/oauth2/token"
-KROGER_BASE_URL  = "https://api.kroger.com/v1"
+KROGER_BASE = "https://api.kroger.com"
+TOKEN_URL   = f"{KROGER_BASE}/v1/connect/oauth2/token"
+LOC_URL     = f"{KROGER_BASE}/v1/locations"
+PROD_URL    = f"{KROGER_BASE}/v1/products"
 
-# --- token cache (client credentials) ---
-_client_token: Dict[str, Any] = {}
+_token_cache: Dict[str, Any] = {"access_token": None, "exp": 0}
 
-def _basic_auth_b64() -> str:
+def _b64_client():
     cid = os.getenv("KROGER_CLIENT_ID", "")
-    csec = os.getenv("KROGER_CLIENT_SECRET", "")
-    pair = f"{cid}:{csec}".encode()
-    return base64.b64encode(pair).decode()
+    sec = os.getenv("KROGER_CLIENT_SECRET", "")
+    if not cid or not sec:
+        raise RuntimeError("KROGER_CLIENT_ID / KROGER_CLIENT_SECRET missing from .env")
+    return base64.b64encode(f"{cid}:{sec}".encode()).decode()
 
-def get_client_token(scope: Optional[str] = None) -> str:
-    """
-    Client-credentials token for server-to-server calls (Products/Locations).
-    Cache until expiration.
-    """
-    global _client_token
-    want_scope = scope or os.getenv("KROGER_SCOPES_CLIENT", "product.compact location.compact")
+def _get_token() -> str:
     now = time.time()
-    if _client_token and _client_token.get("scope") == want_scope and _client_token.get("exp", 0) > now + 30:
-        return _client_token["access_token"]
+    if _token_cache["access_token"] and _token_cache["exp"] > now + 30:
+        return _token_cache["access_token"]
 
-    headers = {"Authorization": f"Basic {_basic_auth_b64()}",
-               "Content-Type": "application/x-www-form-urlencoded"}
-    data = {"grant_type": "client_credentials", "scope": want_scope}
-    r = requests.post(KROGER_OAUTH_URL, headers=headers, data=data, timeout=15)
-    r.raise_for_status()
-    tok = r.json()
-    _client_token = {
-        "access_token": tok["access_token"],
-        "exp": now + int(tok.get("expires_in", 1500)),
-        "scope": want_scope,
+    scope = os.getenv("KROGER_SCOPE", "").strip()  # e.g. "product.compact profile.compact cart.basic:write"
+    headers = {
+        "Authorization": f"Basic {_b64_client()}",
+        "Content-Type": "application/x-www-form-urlencoded",
+        "Accept": "application/json",
     }
-    return _client_token["access_token"]
+    data = {"grant_type": "client_credentials"}
+    if scope:
+        data["scope"] = scope
 
-# --- Locations ---
-def kroger_locations_by_geo(lat: float, lon: float, radius_miles: int = 10, limit: int = 20) -> List[Dict[str, Any]]:
-    """
-    Uses Locations API near a lat/long with radius (miles).
-    """
-    token = get_client_token()
-    # official docs show these filters for geo searches
-    # filter.latLong.near & filter.radiusInMiles
-    # https://developer.kroger.com/documentation/api-products/public/locations/overview
+    r = requests.post(TOKEN_URL, headers=headers, data=data, timeout=15)
+    if r.status_code == 401:
+        raise RuntimeError("Kroger token request unauthorized (check client id/secret and that you used Basic auth).")
+    r.raise_for_status()
+    j = r.json()
+    _token_cache["access_token"] = j["access_token"]
+    _token_cache["exp"] = now + int(j.get("expires_in", 1700))
+    return _token_cache["access_token"]
+
+def _auth_headers():
+    return {"Authorization": f"Bearer {_get_token()}", "Accept": "application/json"}
+
+def _haversine(lat1: float, lon1: float, lat2: float, lon2: float) -> float:
+    R = 3958.8
+    dLat = math.radians(lat2 - lat1)
+    dLon = math.radians(lon2 - lon1)
+    a = (math.sin(dLat/2)**2
+         + math.cos(math.radians(lat1)) * math.cos(math.radians(lat2))
+         * math.sin(dLon/2)**2)
+    return 2 * R * math.atan2(math.sqrt(a), math.sqrt(1 - a))
+
+def _get_locations(lat: float, lon: float, radius_miles: int, limit: int=20) -> List[Dict[str, Any]]:
+    # Public Locations API – supports lat/long and radius
     params = {
-        "filter.latLong.near": f"{lat},{lon}",
-        "filter.radiusInMiles": radius_miles,
-        "filter.limit": limit,
+        "filter.latLong": f"{lat},{lon}",
+        "filter.radiusInMiles": str(max(1, min(radius_miles, 100))),
+        "filter.limit": str(limit),
     }
-    headers = {"Authorization": f"Bearer {token}"}
-    r = requests.get(f"{KROGER_BASE_URL}/locations", headers=headers, params=params, timeout=20)
+    r = requests.get(LOC_URL, headers=_auth_headers(), params=params, timeout=15)
     r.raise_for_status()
-    data = r.json()
-    return data.get("data", [])
+    return r.json().get("data", [])
 
-# --- Products (priced for a specific store) ---
-def kroger_products_for_terms(location_id: str, terms: List[str], limit_per_term: int = 5) -> Dict[str, List[Dict[str, Any]]]:
-    """
-    For each search term, query Products at a specific locationId (required to get price/aisle).
-    Returns dict term -> [products...]
-    """
-    token = get_client_token()
-    headers = {"Authorization": f"Bearer {token}"}
-    out: Dict[str, List[Dict[str, Any]]] = {}
-    for term in terms:
-        if not term:
-            out[term] = []
-            continue
-        params = {
-            "filter.term": term,
-            "filter.locationId": location_id,   # required for price/aisle
-            "filter.limit": limit_per_term
-        }
-        r = requests.get(f"{KROGER_BASE_URL}/products", headers=headers, params=params, timeout=20)
-        r.raise_for_status()
-        out[term] = r.json().get("data", [])
-    return out
+def _get_products(term: str, location_id: str, limit: int=8) -> List[Dict[str, Any]]:
+    params = {
+        "filter.term": term,
+        "filter.locationId": location_id,
+        "filter.limit": str(limit),
+    }
+    r = requests.get(PROD_URL, headers=_auth_headers(), params=params, timeout=20)
+    r.raise_for_status()
+    return r.json().get("data", [])
 
-# --- Transform Kroger data into your app's search result shape ---
-def search_kroger(lat: float, lon: float, items_tokens: List[str], radius_miles: int, lambda_per_mile: float):
+def _pick_cheapest_item(products_json: List[Dict[str, Any]]) -> Tuple[float, Dict[str, Any]] | None:
     """
-    Mirrors /api/search output fields so your UI keeps working.
+    From Kroger product payload, pick the cheapest item (by regular or promo price).
+    Returns (price, friendly_meta) or None.
     """
-    # 1) find nearby Kroger stores
-    locs = kroger_locations_by_geo(lat, lon, radius_miles)
+    best = None
+    for p in products_json:
+        brand = p.get("brand") or ""
+        desc  = p.get("description") or ""
+        items = p.get("items") or []
+        for it in items:
+            size = it.get("size") or it.get("packageSize") or ""
+            price = None
+            pr = (it.get("price") or {})  # {"regular": X, "promo": Y}
+            if "promo" in pr and pr["promo"] not in (None, 0):
+                price = float(pr["promo"])
+            elif "regular" in pr and pr["regular"] not in (None, 0):
+                price = float(pr["regular"])
+            if price is None:
+                continue
+            meta = {"brand": brand, "desc": desc, "size": size}
+            if best is None or price < best[0]:
+                best = (price, meta)
+    return best
+
+def search_kroger(lat: float, lon: float, items_tokens: List[str], radius_miles: int, lambda_per_mile: float) -> Dict[str, Any]:
+    """
+    Shape the response to match your existing /api/search output:
+      { best, stores_full, stores_partial }
+    """
+    locs = _get_locations(lat, lon, radius_miles, limit=25)
+
     stores: List[Dict[str, Any]] = []
-    for loc in locs:
-        try:
-            lid = loc["locationId"]
-            name = loc["name"]
-            coords = loc.get("geolocation", {}).get("latitudeLongitude", {})
-            s_lat, s_lon = float(coords["latitude"]), float(coords["longitude"])
-        except Exception:
+    for L in locs:
+        sid = L.get("locationId") or L.get("locationId", "")
+        name = L.get("name") or "Store"
+        geo  = (L.get("geolocation") or {}).get("coordinates") or {}
+        s_lat, s_lon = geo.get("latitude"), geo.get("longitude")
+        if s_lat is None or s_lon is None:
             continue
+        distance_miles = _haversine(lat, lon, float(s_lat), float(s_lon))
 
-        # 2) for each store, fetch products for each item token
-        term_map = kroger_products_for_terms(lid, items_tokens)
-        found_prices: Dict[str, float] = {}
+        # For each token (e.g. 'milk', 'bananas'), query products at this location and pick the cheapest
+        found_map: Dict[str, float] = {}
         missing: List[str] = []
-
-        # choose the lowest price per token from returned product list
+        details: Dict[str, Any] = {}  # token -> {price, brand, size, desc}
         for t in items_tokens:
-            prods = term_map.get(t, [])
-            best = None
-            for p in prods:
-                # price lives under items[0].price.regular in compact payloads
-                try:
-                    items = p.get("items", [])
-                    if not items:
-                        continue
-                    price = items[0].get("price", {}).get("regular")
-                    if price is None:
-                        continue
-                    price = float(price)
-                    best = price if best is None else min(best, price)
-                except Exception:
-                    continue
-            if best is None:
+            try:
+                prods = _get_products(t, sid, limit=10)
+                pick = _pick_cheapest_item(prods)
+                if pick:
+                    price, meta = pick
+                    found_map[t] = price
+                    details[t] = {"price": round(price, 2), **meta}
+                else:
+                    missing.append(t)
+            except requests.HTTPError as e:
+                # Don’t explode the whole search on a single token failure
                 missing.append(t)
-            else:
-                found_prices[t] = best
 
-        total = sum(found_prices.values()) if items_tokens else 0.0
-        # distance: compute great-circle locally
-        from .logic import haversine
-        dist_mi = haversine(lat, lon, s_lat, s_lon)
-        score = round(total + lambda_per_mile * dist_mi, 2)
+        total = sum(found_map.values()) if items_tokens else 0.0
+        score = total + lambda_per_mile * distance_miles
 
+        addr = (L.get("address") or {})
+        city = addr.get("city") or ""
         stores.append({
-            "store_id": hash(lid) & 0x7fffffff,  # stable-ish int for UI
+            "store_id": sid,
             "store_name": name,
-            "city": loc.get("address", {}).get("city"),
-            "lat": s_lat,
-            "lon": s_lon,
-            "distance_miles": round(dist_mi, 2),
-            "items_found": len(items_tokens) - len(missing),
+            "city": city,
+            "lat": float(s_lat),
+            "lon": float(s_lon),
+            "distance_miles": round(distance_miles, 2),
+            "items": found_map,
+            "items_details": details,  # <-- for richer UI
+            "items_found": len(found_map),
             "items_missing": missing,
             "total_price": round(total, 2),
-            "score": score,
-            "_kroger": {"locationId": lid}  # for debugging
+            "score": round(score, 2),
         })
 
-    # split full/partial to match your existing payload
+    # Split into full/partial and sort similar to DB path
     if items_tokens:
         full = [s for s in stores if not s["items_missing"]]
         partial = [s for s in stores if s["items_missing"]]
@@ -156,9 +165,5 @@ def search_kroger(lat: float, lon: float, items_tokens: List[str], radius_miles:
     full.sort(key=lambda s: (s["total_price"], s["distance_miles"]))
     partial.sort(key=lambda s: (len(s["items_missing"]), s["total_price"] or 1e9, s["distance_miles"]))
 
-    best = (full[0] if full else (partial[0] if partial else None))
-    return {
-        "best": best,
-        "stores_full": full,
-        "stores_partial": partial
-    }
+    best = full[0] if full else (partial[0] if partial else None)
+    return {"best": best, "stores_full": full, "stores_partial": partial}
