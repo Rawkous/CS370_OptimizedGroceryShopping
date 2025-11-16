@@ -7,6 +7,8 @@ from mysql.connector import Error  # type: ignore
 from .db import query
 from .logic import demo_store_scoring, check_items_in_price_history, simulate_route
 from .index_fallback import INDEX_FALLBACK
+from .kroger import search_kroger  # new
+
 
 # Resolve project root robustly (…/CS370_OptimizedGroceryShopping)
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
@@ -191,6 +193,25 @@ def api_search():
         "stores_full": full,
         "stores_partial": partial
     })
+
+source = (request.args.get("source") or "").lower()
+
+if source == "kroger":
+    try:
+        payload = search_kroger(lat, lon, items_tokens, int(radius_miles), float(lambda_per_mile))
+        return jsonify({
+            "query": {
+                "lat": lat, "lon": lon,
+                "radius_miles": radius_miles,
+                "items": items_tokens,
+                "lambda_per_mile": lambda_per_mile,
+                "source": "kroger"
+            },
+            **payload
+        })
+    except Exception as e:
+        return jsonify({"error": f"Kroger error: {e}"}), 500
+
 
 # ---------- small helpers ----------
 @api_bp.get("/api/check-items")
