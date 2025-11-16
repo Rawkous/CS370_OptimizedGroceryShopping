@@ -9,7 +9,6 @@ from .logic import demo_store_scoring, check_items_in_price_history, simulate_ro
 from .index_fallback import INDEX_FALLBACK
 from .kroger import search_kroger  # new
 
-
 # Resolve project root robustly (…/CS370_OptimizedGroceryShopping)
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
 
@@ -21,7 +20,6 @@ api_bp  = Blueprint("api", __name__)
 def root():
     index_path = PROJECT_ROOT / "index.html"
     if index_path.exists():
-        # Use absolute directory to be safe no matter where the app launched from
         return send_from_directory(str(PROJECT_ROOT), "index.html")
     return Response(INDEX_FALLBACK, mimetype="text/html")
 
@@ -94,6 +92,7 @@ def api_items():
 # ---------- search (score + distance) ----------
 @api_bp.get("/api/search")
 def api_search():
+    # 1) Parse inputs
     try:
         lat = float(request.args["lat"])
         lon = float(request.args["lon"])
@@ -109,8 +108,26 @@ def api_search():
     except Exception:
         return jsonify({"error": "radius_miles and lambda_per_mile must be numbers"}), 400
 
-    radius_m = radius_miles * 1609.34
+    # 2) If source=kroger → use live Kroger API and return early
+    source = (request.args.get("source") or "").lower()
+    if source == "kroger":
+        try:
+            payload = search_kroger(lat, lon, items_tokens, int(radius_miles), float(lambda_per_mile))
+            return jsonify({
+                "query": {
+                    "lat": lat, "lon": lon,
+                    "radius_miles": radius_miles,
+                    "items": items_tokens,
+                    "lambda_per_mile": lambda_per_mile,
+                    "source": "kroger"
+                },
+                **payload
+            })
+        except Exception as e:
+            return jsonify({"error": f"Kroger error: {e}"}), 500
 
+    # 3) Default path: DB-backed search
+    radius_m = radius_miles * 1609.34
     base_sql = """
         SELECT
             s.id,
@@ -193,25 +210,6 @@ def api_search():
         "stores_full": full,
         "stores_partial": partial
     })
-
-source = (request.args.get("source") or "").lower()
-
-if source == "kroger":
-    try:
-        payload = search_kroger(lat, lon, items_tokens, int(radius_miles), float(lambda_per_mile))
-        return jsonify({
-            "query": {
-                "lat": lat, "lon": lon,
-                "radius_miles": radius_miles,
-                "items": items_tokens,
-                "lambda_per_mile": lambda_per_mile,
-                "source": "kroger"
-            },
-            **payload
-        })
-    except Exception as e:
-        return jsonify({"error": f"Kroger error: {e}"}), 500
-
 
 # ---------- small helpers ----------
 @api_bp.get("/api/check-items")
