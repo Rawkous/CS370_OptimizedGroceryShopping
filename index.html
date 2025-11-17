@@ -6,14 +6,14 @@
   <title>Closest & Cheapest</title>
 
   <!-- Leaflet -->
-  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" crossorigin="">
+  <link rel="stylesheet" href="https://unpkg.com/leaflet@1.9.4/dist/leaflet.css" crossorigin=""/>
   <script src="https://unpkg.com/leaflet@1.9.4/dist/leaflet.js" crossorigin=""></script>
 
   <style>
     :root{
       --bg:#0f172a; --panel:#121a2c; --muted:#9aa3b2; --border:#1f2937; --text:#e6eef7;
       --accent:#22c55e; --accent-2:#60a5fa; --card:#0b1220; --chip:#0e1a30; --table:#0c1626;
-      --btn:#1e293b; --btn-border:#253041; --warn:#f59e0b; --danger:#ef4444;
+      --btn:#1e293b; --btn-border:#253041;
     }
     body.light{
       --bg:#f6f7fb; --panel:#fff; --muted:#5b6675; --border:#e6e8ee; --text:#0f172a;
@@ -31,7 +31,7 @@
       color:var(--text);
       min-height:100vh;
     }
-    .container{max-width:1200px;margin:24px auto 48px;padding:0 16px}
+    .container{max-width:1100px;margin:24px auto 48px;padding:0 16px}
     h1{font-size:clamp(1.4rem,1.1rem+2vw,2.1rem);margin:0 0 14px;font-weight:800;text-shadow:0 1px 0 rgba(0,0,0,.35)}
     .panel{background:linear-gradient(180deg,rgba(255,255,255,.02),rgba(255,255,255,.01));border:1px solid var(--border);border-radius:14px;padding:14px;box-shadow:0 10px 30px rgba(0,0,0,.35)}
     .row{display:flex;gap:10px;flex-wrap:wrap;align-items:center;margin-bottom:10px}
@@ -44,12 +44,7 @@
     button:active{transform:translateY(1px)}
     .btn-accent{background:linear-gradient(180deg,var(--accent-2),#2563eb);border-color:#1d4ed8;color:#fff}
     .btn-primary{background:linear-gradient(180deg,var(--accent),#16a34a);border-color:#15803d;color:#fff}
-    .btn-ghost{background:transparent;border-color:var(--border)}
     .chip{display:inline-block;padding:3px 8px;border-radius:999px;background:var(--chip);border:1px solid #1b2a45;font-size:12px}
-    .muted{color:var(--muted)}
-    .warn{color:var(--warn)}
-    .danger{color:var(--danger)}
-    .toolbar{display:flex;gap:10px;flex-wrap:wrap;align-items:end}
 
     #map{height:460px;border-radius:12px;border:1px solid var(--border);background:#0d1324}
     .overlay{display:none;position:fixed;inset:0;background:rgba(0,0,0,.45);align-items:center;justify-content:center;z-index:9999}
@@ -57,38 +52,35 @@
     .spinner:before{content:"";width:18px;height:18px;border-radius:50%;border:3px solid var(--border);border-top-color:var(--accent);animation:spin 1s linear infinite}
     @keyframes spin{to{transform:rotate(360deg)}}
 
-    .table-wrap{background:var(--panel);border:1px solid var(--border);border-radius:12px;overflow:auto;max-height:56vh}
+    .card{background:var(--panel);border:1px solid var(--border);border-radius:12px;padding:12px;margin:12px 0}
+    .muted{color:var(--muted)}
+    .kpi{display:flex;gap:10px;flex-wrap:wrap}
+    .kpi span{padding:6px 10px;border-radius:8px;background:#0c1324;border:1px solid var(--border)}
+    .kpi .pill{background:var(--card)}
+    .result-header{display:flex;gap:10px;align-items:center;flex-wrap:wrap}
+
+    .table-wrap{background:var(--panel);border:1px solid var(--border);border-radius:12px;overflow:auto;max-height:52vh}
     table{width:100%;border-collapse:collapse}
-    thead th{position:sticky;top:0;background:#0e1a30;color:#cbd5e1;text-align:left;font-weight:700;font-size:13px;padding:10px;border-bottom:1px solid var(--border);cursor:pointer;user-select:none}
+    thead th{position:sticky;top:0;background:#0e1a30;color:#cbd5e1;text-align:left;font-weight:700;font-size:13px;padding:10px;border-bottom:1px solid var(--border)}
     tbody td{padding:10px;border-bottom:1px dashed #1c2434;font-size:14px;background:var(--table)}
     tbody tr:hover{background:#0c1628}
     tr.highlight td{background:#10203a}
-    .caret{font-size:12px;margin-left:6px;opacity:.7}
 
-    .drawer{background:var(--panel);border-left:4px solid #1f2937;padding:12px 12px 6px;border-bottom:1px dashed #1c2434}
-    .prod-grid{display:grid;grid-template-columns:2.2fr .8fr .7fr;gap:8px;align-items:center}
-    .prod-grid div{padding:6px 0;border-bottom:1px dashed #1b2536}
-    .prod-header{font-weight:700;color:#9fb3ca}
+    /* Compare */
+    #comparePanel{display:none;margin-top:10px}
+    #comparePanel.active{display:block}
+    .compare-grid{display:grid;grid-template-columns:1fr 1fr;gap:10px}
+    .compare-card{border:1px solid var(--border);border-radius:10px;padding:10px;background:var(--panel)}
 
-    /* Picker modal */
+    /* Item modal */
     .modal{display:none;position:fixed;inset:0;background:rgba(0,0,0,.55);justify-content:center;align-items:center;z-index:9990}
-    .modal-content{background:var(--panel);color:var(--text);border:1px solid var(--border);border-radius:12px;padding:16px;max-height:84vh;min-width:340px;width:min(760px,92vw);box-shadow:0 20px 60px rgba(0,0,0,.45)}
-    .tabs{display:flex;gap:8px;margin-bottom:10px}
-    .tab{padding:8px 10px;border:1px solid var(--border);border-radius:8px;background:var(--card);cursor:pointer}
-    .tab.active{background:linear-gradient(180deg,var(--btn),#0f172a22)}
-    #itemList{max-height:56vh;overflow-y:auto;border:1px solid var(--border);background:var(--card);padding:6px;border-radius:8px}
+    .modal-content{background:var(--panel);color:var(--text);border:1px solid var(--border);border-radius:12px;padding:16px;max-height:80vh;min-width:340px;width:min(640px,90vw);box-shadow:0 20px 60px rgba(0,0,0,.45)}
+    #itemList{max-height:60vh;overflow-y:auto;border:1px solid var(--border);background:var(--card);padding:6px;border-radius:8px}
     #itemList label{display:block;padding:6px 4px;cursor:pointer}
-    .chiplist{display:flex;flex-wrap:wrap;gap:6px;margin:8px 0}
-    .chiplist .chip{display:flex;gap:6px;align-items:center}
-    .chip button{border:none;background:#0000;color:inherit;cursor:pointer;font-size:12px}
 
-    /* Topbar secondary */
-    .secondary{display:flex;gap:10px;flex-wrap:wrap;align-items:center}
-    @media (max-width:720px){
-      #map{height:280px}
-      .toolbar{flex-direction:column;align-items:stretch}
-      .secondary{flex-direction:column;align-items:stretch}
-    }
+    .spacer{flex:1}
+    .toolbar{display:flex;gap:10px;flex-wrap:wrap;align-items:end}
+    @media (max-width:640px){#map{height:260px}.toolbar{flex-direction:column;align-items:stretch}}
   </style>
 </head>
 <body>
@@ -96,20 +88,19 @@
   <h1>Find the closest & cheapest store</h1>
 
   <div class="panel">
-    <!-- Primary toolbar -->
     <div class="toolbar">
       <div>
         <label class="small">Latitude</label>
-        <input id="lat" type="number" step="any" placeholder="Latitude" style="width:220px">
+        <input id="lat" type="number" step="any" placeholder="Latitude" style="width:220px"/>
       </div>
       <div>
         <label class="small">Longitude</label>
-        <input id="lon" type="number" step="any" placeholder="Longitude" style="width:220px">
+        <input id="lon" type="number" step="any" placeholder="Longitude" style="width:220px"/>
       </div>
       <div>
         <label class="small">Source</label>
-        <select id="source" style="width:200px">
-          <option value="db">Database</option>
+        <select id="sourceSel" style="width:220px">
+          <option value="db">Local DB</option>
           <option value="kroger">Kroger (live)</option>
         </select>
       </div>
@@ -119,69 +110,60 @@
       <button id="themeToggle" title="Toggle theme">🌙</button>
     </div>
 
-    <!-- Secondary controls -->
-    <div class="secondary">
-      <div class="row" style="margin:0">
-        <button id="selectItemsBtn">Select items</button>
-        <div id="selectedItems" class="muted">(none)</div>
-      </div>
+    <div class="row">
+      <button id="selectItemsBtn">Select items</button>
+      <div id="selectedItems" class="muted">(none)</div>
+    </div>
 
-      <div class="row" style="margin:0">
-        <div style="min-width:160px">
-          <label class="small">Miles radius</label>
-          <input id="radius" type="number" step="1" min="1" value="10" style="width:160px">
-        </div>
-        <div style="min-width:220px">
-          <label class="small">Distance penalty ( $ / mi )</label>
-          <div style="display:flex;gap:8px;align-items:center">
-            <input id="lambda" type="number" step="0.1" value="0.5" style="width:100px">
-            <input id="lambdaRange" type="range" min="0" max="5" step="0.1" value="0.5" style="width:160px">
-          </div>
-        </div>
-        <div style="min-width:180px">
-          <label class="small">Sort by</label>
-          <select id="sortBy" style="width:180px">
-            <option value="score">Score (lowest)</option>
-            <option value="total">Total price (lowest)</option>
-            <option value="distance">Distance (nearest)</option>
-            <option value="found">Items found (highest)</option>
-          </select>
-        </div>
-        <div style="display:flex;gap:8px;align-items:flex-end">
-          <button id="shareBtn" class="btn-ghost">Share URL</button>
-          <button id="csvBtn" class="btn-ghost">Export CSV</button>
+    <div class="row">
+      <div style="min-width:160px">
+        <label class="small">Miles radius</label>
+        <input id="radius" type="number" step="1" min="1" value="10" style="width:160px"/>
+      </div>
+      <div style="min-width:220px">
+        <label class="small">Distance penalty ( $ / mi )</label>
+        <div style="display:flex;gap:8px;align-items:center">
+          <input id="lambda" type="number" step="0.1" value="0.5" style="width:100px"/>
+          <input id="lambdaRange" type="range" min="0" max="5" step="0.1" value="0.5" style="width:160px"/>
         </div>
       </div>
     </div>
 
     <div class="muted" style="margin:8px 0 10px">
       <span>Score = <b>total price</b> + λ × <b>distance (mi)</b>. Lower is better.</span>
-      <span id="authHint" class="muted" style="margin-left:8px"></span>
     </div>
 
     <div id="map" class="panel" style="padding:0;box-shadow:none"></div>
 
-    <div id="bestWrap" class="panel" style="display:none;margin-top:12px"></div>
+    <!-- NEW: error banner -->
+    <div id="errorBanner" class="card" style="display:none;color:#ef4444;border-color:#7f1d1d;background:rgba(127,29,29,.08)"></div>
 
-    <div class="row" style="align-items:center">
+    <div id="bestWrap" class="card" style="display:none"></div>
+
+    <div class="row">
       <div class="grow">
         <label class="small">Filter results</label>
-        <input id="resultFilter" placeholder="Type to filter by store name or city…" style="width:100%">
+        <input id="resultFilter" placeholder="Type to filter by store name or city…" style="width:100%"/>
+      </div>
+      <div id="comparePanel" class="grow">
+        <div class="compare-grid">
+          <div class="compare-card" id="cmpA">Select any 2 stores to compare.</div>
+          <div class="compare-card" id="cmpB"></div>
+        </div>
       </div>
     </div>
 
     <div class="table-wrap" id="tableWrap" style="display:none">
       <table id="resultTable">
         <thead>
-        <tr>
-          <th style="width:38px"></th>
-          <th data-sort="store">Store</th>
-          <th data-sort="distance">Distance</th>
-          <th data-sort="total">Total</th>
-          <th data-sort="found">Items Found</th>
-          <th>Missing</th>
-          <th style="width:120px;text-align:right">Actions</th>
-        </tr>
+          <tr>
+            <th style="width:38px"></th>
+            <th>Store</th>
+            <th>Distance</th>
+            <th>Total</th>
+            <th>Items Found</th>
+            <th>Missing</th>
+          </tr>
         </thead>
         <tbody id="resultBody"></tbody>
       </table>
@@ -192,29 +174,9 @@
 <!-- Item Picker Modal -->
 <div id="itemModal" class="modal">
   <div class="modal-content">
-    <div style="display:flex;align-items:center;gap:10px;justify-content:space-between">
-      <h2 style="margin:0 0 10px">Select items</h2>
-      <span id="pickerNote" class="muted" style="font-size:12px"></span>
-    </div>
-
-    <div class="tabs">
-      <button id="tabDb" class="tab">From Database</button>
-      <button id="tabFree" class="tab">Type keywords</button>
-    </div>
-
-    <!-- DB list -->
-    <div id="dbPane">
-      <input id="itemSearch" placeholder="Search DB items..." style="width:100%;padding:10px;border-radius:10px;border:1px solid var(--border);background:var(--card);color:var(--text);margin-bottom:10px;">
-      <div id="itemList"></div>
-    </div>
-
-    <!-- Free keywords (Kroger-friendly) -->
-    <div id="freePane" style="display:none">
-      <div class="muted" style="margin-bottom:6px">Type an item and press Enter. Examples: <i>2% milk</i>, <i>white bread</i>, <i>bananas</i>.</div>
-      <input id="freeInput" placeholder="Type item and press Enter…" style="width:100%;padding:10px;border-radius:10px;border:1px solid var(--border);background:var(--card);color:var(--text);margin-bottom:8px;">
-      <div id="freeChips" class="chiplist"></div>
-    </div>
-
+    <h2 style="margin:0 0 10px">Select items</h2>
+    <input id="itemSearch" placeholder="Search items..." style="width:100%;padding:10px;border-radius:10px;border:1px solid var(--border);background:var(--card);color:var(--text);margin-bottom:10px;">
+    <div id="itemList"></div>
     <div style="margin-top:12px;display:flex;gap:8px;justify-content:flex-end">
       <button id="cancelSelect">Cancel</button>
       <button id="confirmSelect" class="btn-accent">Use selected</button>
@@ -230,36 +192,22 @@
 <script>
   const apiBase = window.location.origin;
 
-  // === Theme ===
+  // --- Theme toggle ---
   const themeToggle = document.getElementById('themeToggle');
   function applyTheme(){
     const t = localStorage.getItem('theme') || 'dark';
     document.body.classList.toggle('light', t === 'light');
     themeToggle.textContent = t === 'light' ? '🌞' : '🌙';
   }
-  themeToggle.onclick = ()=>{
+  function toggleTheme(){
     const t = localStorage.getItem('theme') || 'dark';
     localStorage.setItem('theme', t === 'light' ? 'dark' : 'light');
     applyTheme();
-  };
+  }
+  themeToggle.onclick = toggleTheme;
   applyTheme();
 
-  // === State / DOM refs ===
-  const $lat = document.getElementById('lat');
-  const $lon = document.getElementById('lon');
-  const $radius = document.getElementById('radius');
-  const $lambda = document.getElementById('lambda');
-  const $lambdaRange = document.getElementById('lambdaRange');
-  const $overlay = document.getElementById('overlay');
-  const $resultFilter = document.getElementById('resultFilter');
-  const $tableWrap = document.getElementById('tableWrap');
-  const $tbody = document.getElementById('resultBody');
-  const $bestWrap = document.getElementById('bestWrap');
-  const $source = document.getElementById('source');
-  const $sortBy = document.getElementById('sortBy');
-  const $authHint = document.getElementById('authHint');
-
-  // item picker
+  // --- Item picker DOM ---
   const selectBtn = document.getElementById('selectItemsBtn');
   const modal = document.getElementById('itemModal');
   const itemListEl = document.getElementById('itemList');
@@ -267,74 +215,66 @@
   const itemSearch = document.getElementById('itemSearch');
   const cancelBtn = document.getElementById('cancelSelect');
   const confirmBtn = document.getElementById('confirmSelect');
-  const tabDb = document.getElementById('tabDb');
-  const tabFree = document.getElementById('tabFree');
-  const dbPane = document.getElementById('dbPane');
-  const freePane = document.getElementById('freePane');
-  const freeInput = document.getElementById('freeInput');
-  const freeChips = document.getElementById('freeChips');
-  const pickerNote = document.getElementById('pickerNote');
 
   let allItems = [];
-  let selectedSet = new Set();      // display names/chips
-  let freeSet = new Set();          // for "Type keywords" tab
-
-  // === Helpers ===
-  const fmtMoney = (n)=> `$${(n||0).toFixed(2)}`;
+  let selectedSet = new Set();
 
   function showSelectedItems(){
-    const both = new Set([...selectedSet, ...freeSet]);
-    const text = [...both].join(', ');
-    selectedItemsEl.textContent = text || '(none)';
-  }
-  function selectedItemsCSV(){
-    const both = new Set([...selectedSet, ...freeSet]);
-    return [...both].join(',');
+    selectedItemsEl.textContent = [...selectedSet].join(', ') || '(none)';
   }
 
-  // load/save prefs
-  function loadPrefs(){
-    $lat.value = localStorage.getItem('lat') || '';
-    $lon.value = localStorage.getItem('lon') || '';
-    $radius.value = localStorage.getItem('radius') || 10;
-    $lambda.value = localStorage.getItem('lambda') || 0.5;
-    $lambdaRange.value = $lambda.value;
-    $source.value = localStorage.getItem('source') || 'db';
-    const savedSel = JSON.parse(localStorage.getItem('selectedItems') || '[]');
-    const savedFree = JSON.parse(localStorage.getItem('freeItems') || '[]');
-    selectedSet = new Set(savedSel);
-    freeSet = new Set(savedFree);
+  async function loadItems(q=''){
+    const url = new URL('/api/items', window.location.origin);
+    if (q) url.searchParams.set('q', q);
+    const res = await fetch(url);
+    allItems = await res.json();
+    renderItemList();
+  }
+  function renderItemList(){
+    itemListEl.innerHTML = '';
+    if (!Array.isArray(allItems) || allItems.length === 0){
+      itemListEl.innerHTML = '<div class="muted" style="padding:8px">No items found.</div>';
+      return;
+    }
+    allItems.forEach(name=>{
+      const id = `chk_${name.replace(/\s+/g,'_')}`;
+      const row = document.createElement('div');
+      row.innerHTML = `<label><input type="checkbox" id="${id}" value="${name}" ${selectedSet.has(name)?'checked':''}> ${name}</label>`;
+      row.querySelector('input').addEventListener('change', e=>{
+        if (e.target.checked) selectedSet.add(name); else selectedSet.delete(name);
+      });
+      itemListEl.appendChild(row);
+    });
+  }
+  selectBtn.onclick = async ()=>{
+    modal.style.display = 'flex';
+    await loadItems();
+    itemSearch.value = '';
+    itemSearch.focus();
+  };
+  cancelBtn.onclick = ()=>{ modal.style.display = 'none'; };
+  confirmBtn.onclick = ()=>{
+    modal.style.display = 'none';
     showSelectedItems();
-    updatePickerTabs();
-  }
-  function savePrefs(lat, lon, radius){
-    localStorage.setItem('lat', lat);
-    localStorage.setItem('lon', lon);
-    localStorage.setItem('radius', radius);
-    localStorage.setItem('lambda', $lambda.value);
-    localStorage.setItem('source', $source.value);
     localStorage.setItem('selectedItems', JSON.stringify([...selectedSet]));
-    localStorage.setItem('freeItems', JSON.stringify([...freeSet]));
-  }
-  loadPrefs();
+  };
+  itemSearch.addEventListener('input', ()=>{
+    const q = itemSearch.value.trim();
+    clearTimeout(window._itemSearchTimer);
+    window._itemSearchTimer = setTimeout(()=>loadItems(q), 250);
+  });
+  function selectedItemsCSV(){ return [...selectedSet].join(','); }
 
-  // lambda sync
-  function syncLambda(fromRange){
-    if (fromRange) $lambda.value = $lambdaRange.value;
-    else $lambdaRange.value = $lambda.value || 0.5;
-    localStorage.setItem('lambda', $lambda.value);
-  }
-  $lambda.oninput = ()=>syncLambda(false);
-  $lambdaRange.oninput = ()=>syncLambda(true);
-
-  // === Map ===
+  // --- Map helpers ---
   let map=null, markerGroup=null, radiusCircle=null;
   let currentMarkersById = new Map();
 
   function ensureMap(lat, lon){
     if (!map){
       map = L.map('map').setView([lat, lon], 12);
-      L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {maxZoom:19, attribution:'&copy; OpenStreetMap contributors'}).addTo(map);
+      L.tileLayer('https://{s}.tile.openstreetmap.org/{z}/{x}/{y}.png', {
+        maxZoom:19, attribution:'&copy; OpenStreetMap contributors'
+      }).addTo(map);
       markerGroup = L.layerGroup().addTo(map);
     } else {
       map.setView([lat, lon], 12);
@@ -353,10 +293,57 @@
     }
   }
 
-  // geolocation
+  // --- Inputs + localStorage ---
+  const $lat = document.getElementById('lat');
+  const $lon = document.getElementById('lon');
+  const $radius = document.getElementById('radius');
+  const $lambda = document.getElementById('lambda');
+  const $lambdaRange = document.getElementById('lambdaRange');
+  const $overlay = document.getElementById('overlay');
+  const $resultFilter = document.getElementById('resultFilter');
+  const $tableWrap = document.getElementById('tableWrap');
+  const $tbody = document.getElementById('resultBody');
+  const $bestWrap = document.getElementById('bestWrap');
+  const $source = document.getElementById('sourceSel');
+  const $errorBanner = document.getElementById('errorBanner');
+
+  function syncLambda(fromRange){
+    if (fromRange) $lambda.value = $lambdaRange.value;
+    else $lambdaRange.value = $lambda.value || 0.5;
+    localStorage.setItem('lambda', $lambda.value);
+  }
+  $lambda.oninput = ()=>syncLambda(false);
+  $lambdaRange.oninput = ()=>syncLambda(true);
+
+  function loadPrefs(){
+    $lat.value = localStorage.getItem('lat') || '';
+    $lon.value = localStorage.getItem('lon') || '';
+    $radius.value = localStorage.getItem('radius') || 10;
+    $lambda.value = localStorage.getItem('lambda') || 0.5;
+    const savedSrc = localStorage.getItem('source') || 'db';
+    $source.value = savedSrc;
+    syncLambda(false);
+    const savedItems = JSON.parse(localStorage.getItem('selectedItems') || '[]');
+    selectedSet = new Set(savedItems);
+    showSelectedItems();
+  }
+  function savePrefs(lat, lon, radius){
+    localStorage.setItem('lat', lat);
+    localStorage.setItem('lon', lon);
+    localStorage.setItem('radius', radius);
+    localStorage.setItem('lambda', $lambda.value);
+    localStorage.setItem('selectedItems', JSON.stringify([...selectedSet]));
+    localStorage.setItem('source', $source.value);
+  }
+  loadPrefs();
+  $source.onchange = ()=> localStorage.setItem('source', $source.value);
+
+  // --- Geolocation ---
   document.getElementById('geo').onclick = ()=>{
     if (!navigator.geolocation){
-      alert('Geolocation not supported.');
+      alert('Geolocation not supported by this browser.');
+      const lat=parseFloat($lat.value), lon=parseFloat($lon.value);
+      if (!isNaN(lat) && !isNaN(lon)) ensureMap(lat,lon);
       return;
     }
     navigator.geolocation.getCurrentPosition(
@@ -368,123 +355,60 @@
       },
       err=>{
         console.warn('Geolocation error:', err.message);
-        alert(err.message + '\nTip: allow location access or enter lat/lon manually.');
-      }, { enableHighAccuracy:true, timeout:8000 }
+        alert(err.message + '\nTip: open on http://127.0.0.1:5000 or allow location.');
+      },
+      { enableHighAccuracy:true, timeout:8000 }
     );
   };
 
-  // === Item picker ===
-  function updatePickerTabs(){
-    const src = $source.value;
-    // default to DB list in DB mode; allow both tabs in either mode
-    pickerNote.textContent = src==='kroger'
-      ? 'Kroger mode: keywords help match brands/sizes (e.g., “2% milk 1gal”).'
-      : 'Database mode: items come from your DB.';
+  // --- Errors ---
+  function showError(msg){
+    $errorBanner.style.display = 'block';
+    $errorBanner.textContent = msg;
   }
-  $source.addEventListener('change', updatePickerTabs);
-
-  async function loadDbItems(q=''){
-    const url = new URL('/api/items', window.location.origin);
-    if (q) url.searchParams.set('q', q);
-    try{
-      const res = await fetch(url);
-      const arr = await res.json();
-      allItems = Array.isArray(arr)?arr:[];
-    }catch{ allItems = []; }
-    renderDbItemList();
-  }
-  function renderDbItemList(){
-    itemListEl.innerHTML = '';
-    if (!allItems.length){ itemListEl.innerHTML = '<div class="muted" style="padding:8px">No items found.</div>'; return; }
-    allItems.forEach(name=>{
-      const id = `chk_${name.replace(/\s+/g,'_')}`;
-      const row = document.createElement('div');
-      row.innerHTML = `<label><input type="checkbox" id="${id}" value="${name}" ${selectedSet.has(name)?'checked':''}> ${name}</label>`;
-      row.querySelector('input').addEventListener('change', e=>{
-        if (e.target.checked) selectedSet.add(name); else selectedSet.delete(name);
-      });
-      itemListEl.appendChild(row);
-    });
-  }
-  function renderFreeChips(){
-    freeChips.innerHTML='';
-    [...freeSet].forEach(v=>{
-      const el = document.createElement('span');
-      el.className='chip';
-      el.innerHTML = `${v} <button title="remove" aria-label="remove">✕</button>`;
-      el.querySelector('button').onclick = ()=>{ freeSet.delete(v); renderFreeChips(); };
-      freeChips.appendChild(el);
-    });
+  function clearError(){
+    $errorBanner.style.display = 'none';
+    $errorBanner.textContent = '';
   }
 
-  selectBtn.onclick = async ()=>{
-    modal.style.display='flex';
-    // start on a sensible tab
-    if ($source.value==='kroger'){ activateTab('free'); } else { activateTab('db'); }
-    await loadDbItems();
-    itemSearch.value=''; itemSearch.focus();
-    renderFreeChips();
-  };
-  cancelBtn.onclick = ()=>{ modal.style.display='none'; };
-  confirmBtn.onclick = ()=>{
-    modal.style.display='none';
-    showSelectedItems();
-    localStorage.setItem('selectedItems', JSON.stringify([...selectedSet]));
-    localStorage.setItem('freeItems', JSON.stringify([...freeSet]));
-  };
-  itemSearch.addEventListener('input', ()=>{
-    const q = itemSearch.value.trim();
-    clearTimeout(window._itemSearchTimer);
-    window._itemSearchTimer = setTimeout(()=>loadDbItems(q), 250);
-  });
-  freeInput.addEventListener('keydown', (e)=>{
-    if (e.key==='Enter'){
-      const val = freeInput.value.trim();
-      if (val){ freeSet.add(val); renderFreeChips(); freeInput.value=''; }
-    }
-  });
-  function activateTab(which){
-    if (which==='db'){
-      tabDb.classList.add('active'); tabFree.classList.remove('active');
-      dbPane.style.display='block'; freePane.style.display='none';
-    }else{
-      tabFree.classList.add('active'); tabDb.classList.remove('active');
-      dbPane.style.display='none'; freePane.style.display='block';
-      freeInput.focus();
-    }
-  }
-  tabDb.onclick = ()=>activateTab('db');
-  tabFree.onclick = ()=>activateTab('free');
-
-  // === Search ===
+  // --- Search flow ---
   document.getElementById('searchBtn').onclick = doSearch;
 
   async function doSearch(){
     const latStr = $lat.value.trim(), lonStr = $lon.value.trim();
-    if (!latStr || !lonStr) return alert("Provide lat/lon (or click 'Use my location').");
+    if (!latStr || !lonStr) return alert("Please provide lat/lon (or click 'Use my location').");
     const lat = parseFloat(latStr), lon = parseFloat(lonStr);
-
     if (!map) ensureMap(lat, lon);
-    drawRadius(lat, lon, parseFloat($radius.value||'10'));
-    savePrefs(lat, lon, $radius.value||'10');
 
     const items = selectedItemsCSV();
+    const radius = $radius.value.trim() || '10';
+    const lambda = $lambda.value.trim() || '0.5';
+
+    drawRadius(lat, lon, parseFloat(radius));
+    savePrefs(lat, lon, radius);
+
     const url = new URL(apiBase + '/api/search');
     url.searchParams.set('lat', lat);
     url.searchParams.set('lon', lon);
     if (items) url.searchParams.set('items', items);
-    url.searchParams.set('radius_miles', $radius.value || '10');
-    url.searchParams.set('lambda_per_mile', $lambda.value || '0.5');
-    url.searchParams.set('source', $source.value); // <— DB or kroger
+    url.searchParams.set('radius_miles', radius);
+    url.searchParams.set('lambda_per_mile', lambda);
+    if ($source.value === 'kroger') url.searchParams.set('source', 'kroger');
 
     setLoading(true);
+    clearError();
     try{
       const res = await fetch(url);
       const data = await res.json();
-      render(data);
+      if (!res.ok) {
+        showError(data.error || `HTTP ${res.status}`);
+        render({stores_full:[], stores_partial:[], best:null, query:{items:items?items.split(','):[] }});
+      } else {
+        render(data);
+      }
     }catch(e){
       console.error(e);
-      alert('Search failed. See console for details.');
+      showError('Search failed. Check networking / API credentials.');
     }finally{
       setLoading(false);
     }
@@ -496,27 +420,13 @@
     $overlay.style.display = b ? 'flex' : 'none';
   }
 
-  // === Render ===
-  let lastResults = {rows:[], best:null, source:'db'};
+  // --- Render results & map markers ---
+  let lastResults = {rows:[], best:null, query:{}};
   let comparing = [];
-  let currentSort = 'score';
 
   function render(data){
-    if (data.error){
-      $bestWrap.style.display='block';
-      $bestWrap.innerHTML = `<div class="panel danger">Error: ${data.error}</div>`;
-      $tableWrap.style.display='none';
-      return;
-    }
-
     const rows = (data.stores_full||[]).concat(data.stores_partial||[]);
-    lastResults = {rows, best:data.best||null, source: ($source.value||'db')};
-
-    // auth hint (optional)
-    fetchKrogerAuthStatus();
-
-    // apply client-side sort
-    sortRows(rows, $sortBy.value);
+    lastResults = {rows, best: data.best || null, query: data.query || lastResults.query || {}};
 
     renderBest(data.best);
     renderTable(rows, data.best ? data.best.store_id : null);
@@ -533,7 +443,7 @@
         const bounds = L.latLngBounds();
         rows.forEach(s=>{
           const m = L.marker([s.lat, s.lon], {title:s.store_name}).addTo(markerGroup);
-          m.bindPopup(`<b>${s.store_name}</b><br>${s.distance_miles.toFixed(2)} mi<br>${fmtMoney(s.total_price||0)}`);
+          m.bindPopup(`<b>${s.store_name}</b><br>${s.distance_miles.toFixed(2)} mi<br>$${(s.total_price||0).toFixed(2)}`);
           if (data.best && s.store_id === data.best.store_id) m.setZIndexOffset(1000);
           currentMarkersById.set(s.store_id, m);
           bounds.extend(m.getLatLng());
@@ -547,73 +457,17 @@
     }
   }
 
-  function sortRows(rows, key){
-    if (key==='score') rows.sort((a,b)=>(a.score??1e9)-(b.score??1e9));
-    else if (key==='total') rows.sort((a,b)=>(a.total_price??1e9)-(b.total_price??1e9));
-    else if (key==='distance') rows.sort((a,b)=>a.distance_miles-b.distance_miles);
-    else if (key==='found') rows.sort((a,b)=> (b.items_found||0) - (a.items_found||0));
-  }
-  $sortBy.addEventListener('change', ()=>{ if (lastResults.rows.length){ sortRows(lastResults.rows, $sortBy.value); renderTable(lastResults.rows, lastResults.best?.store_id); }});
-
   function renderBest(best){
     if (!best){ $bestWrap.style.display='none'; return; }
     $bestWrap.style.display='block';
-    const missing = Array.isArray(best.items_missing) && best.items_missing.length ? `<div class="muted" style="margin-top:6px">Missing: ${best.items_missing.join(', ')}</div>` : '';
     $bestWrap.innerHTML = `
-      <div style="display:flex;gap:10px;align-items:center;flex-wrap:wrap">
+      <div class="result-header">
         <h3 style="margin:0">${best.store_name}</h3>
-        <span class="chip"><b>${best.distance_miles.toFixed(2)} mi</b></span>
-        <span class="chip"><b>${fmtMoney(best.total_price||0)}</b></span>
-        <span class="chip"><b>${(best.score??0).toFixed(2)}</b> score</span>
-        ${lastResults.source==='kroger' ? '<span class="chip">Kroger</span>' : '<span class="chip">DB</span>'}
+        <span class="chip pill"><b>${best.distance_miles.toFixed(2)} mi</b> away</span>
+        <span class="chip pill"><b>$${(best.total_price||0).toFixed(2)}</b> total</span>
+        <span class="chip pill"><b>${best.score.toFixed(2)}</b> score</span>
       </div>
-      ${missing}`;
-  }
-
-  function rowDetailsHtml(s){
-    // Prefer Kroger detailed products if present
-    const list = s.kroger_products || s.items_detail || null;
-    if (!list) return `<div class="muted">No per-item details available.</div>`;
-
-    // Normalize to array of { name/brand/size, price }
-    // Possible shapes:
-    // - kroger_products: [{token, items:[{brand,size,price,name,upc,productId}...]}]
-    // - items_detail:    [{name, brand, size, price}]
-    let rows = [];
-    if (s.kroger_products){
-      s.kroger_products.forEach(group=>{
-        if (group.items && group.items.length){
-          // choose cheapest first; but display top 3 options
-          const top = [...group.items].sort((a,b)=>(+a.price)-(+b.price)).slice(0,3);
-          top.forEach((it,idx)=>{
-            rows.push({
-              name: it.name || group.token,
-              brand: it.brand || '',
-              size: it.size || '',
-              price: +it.price || 0,
-              upc: it.upc || '',
-              rank: idx+1
-            });
-          });
-        }else{
-          rows.push({name: group.token, brand:'', size:'', price:0, upc:'', rank:null});
-        }
-      });
-    } else if (s.items_detail){
-      rows = s.items_detail.map(it=>({name:it.name||'', brand:it.brand||'', size:it.size||'', price:+(it.price||0), upc:it.upc||''}));
-    }
-
-    if (!rows.length) return `<div class="muted">No per-item details available.</div>`;
-
-    const header = `<div class="prod-grid prod-header"><div>Item (brand/size)</div><div style="text-align:right">Best price</div><div style="text-align:right">Option</div></div>`;
-    const html = rows.map(r=>`
-      <div class="prod-grid">
-        <div>${r.name}${r.brand?` <span class="muted">· ${r.brand}</span>`:''}${r.size?` <span class="muted">· ${r.size}</span>`:''}${r.upc?` <span class="muted">· UPC ${r.upc}</span>`:''}</div>
-        <div style="text-align:right">${r.price>0?fmtMoney(r.price):'<span class="muted">—</span>'}</div>
-        <div style="text-align:right">${r.rank?('#'+r.rank):''}</div>
-      </div>`).join('');
-
-    return header + html;
+      ${Array.isArray(best.items_missing) && best.items_missing.length ? `<div class="muted" style="margin-top:6px">Missing: ${best.items_missing.join(', ')}</div>` : ''}`;
   }
 
   function renderTable(rows, bestId){
@@ -621,45 +475,68 @@
     rows.forEach(s=>{
       const tr = document.createElement('tr');
       tr.dataset.sid = s.store_id;
-      const missingTxt = (s.items_missing||[]).join(', ');
       tr.innerHTML = `
         <td><input type="checkbox" class="cmp" data-sid="${s.store_id}"></td>
-        <td class="rowHead" style="cursor:pointer">${s.store_name}${s.city?` <span class="muted">· ${s.city}</span>`:''} <span class="caret">▾</span></td>
+        <td>
+          <div style="display:flex;align-items:center;gap:8px">
+            <div style="font-weight:600">${s.store_name}${s.city?` <span class="muted">· ${s.city}</span>`:''}</div>
+            <button class="btn-accent" data-toggle="${s.store_id}" style="padding:4px 8px;font-size:12px">🧺 View basket</button>
+          </div>
+          <div class="card" id="basket_${s.store_id}" style="display:none;margin-top:8px">
+            ${basketHtml(s)}
+          </div>
+        </td>
         <td>${s.distance_miles.toFixed(2)} mi</td>
-        <td>${fmtMoney(s.total_price||0)}</td>
-        <td><span class="chip">${s.items_found||0}</span></td>
-        <td>${missingTxt}</td>
-        <td style="text-align:right">
-          ${lastResults.source==='kroger'
-            ? '<button class="btn-ghost small addCartBtn" data-sid="'+s.store_id+'">Add to cart</button>'
-            : '<span class="muted">—</span>'}
-        </td>`;
+        <td>$${(s.total_price||0).toFixed(2)}</td>
+        <td><span class="chip">${s.items_found}</span></td>
+        <td>${(s.items_missing||[]).join(', ')}</td>`;
       if (s.store_id === bestId) tr.classList.add('highlight');
-      $tbody.appendChild(tr);
-
-      // Drawer row
-      const drawer = document.createElement('tr');
-      drawer.innerHTML = `<td></td><td colspan="6"><div class="drawer" style="display:none"></div></td>`;
-      $tbody.appendChild(drawer);
-
-      // Interactions
-      tr.querySelector('.rowHead').addEventListener('click', ()=>{
-        const el = drawer.querySelector('.drawer');
-        const open = el.style.display !== 'none';
-        if (open){ el.style.display='none'; tr.querySelector('.caret').textContent='▾'; return; }
-        el.innerHTML = rowDetailsHtml(s);
-        el.style.display='block';
-        tr.querySelector('.caret').textContent='▴';
-        const m=currentMarkersById.get(s.store_id); if (m){ m.openPopup(); }
-      });
-
       tr.addEventListener('mouseenter',()=>{ const m=currentMarkersById.get(s.store_id); if (m) m.openPopup(); highlightRow(s.store_id,true); });
       tr.addEventListener('mouseleave',()=>highlightRow(s.store_id,false));
+      $tbody.appendChild(tr);
     });
-
     $tableWrap.style.display = rows.length ? 'block' : 'none';
     wireCompareCheckboxes();
-    wireCartButtons();
+
+    // wire up basket toggles
+    $tbody.querySelectorAll('button[data-toggle]').forEach(btn=>{
+      btn.addEventListener('click', ()=>{
+        const sid = btn.getAttribute('data-toggle');
+        const el = document.getElementById('basket_'+sid);
+        if (!el) return;
+        const on = el.style.display !== 'none';
+        el.style.display = on ? 'none' : 'block';
+        btn.textContent = on ? '🧺 View basket' : '🧺 Hide basket';
+      });
+    });
+  }
+
+  function basketHtml(s){
+    const tokens = (lastResults?.query?.items) || []; // from backend when available
+    const want = (Array.isArray(tokens) && tokens.length) ? tokens : Object.keys(s.items || {});
+    if (!want.length) return '<div class="muted">No specific items requested.</div>';
+
+    const rows = want.map(t=>{
+      const det = (s.items_details || {})[t];
+      const price = (s.items || {})[t];
+      if (price == null) {
+        return `<div style="display:grid;grid-template-columns:1fr auto;gap:8px;padding:6px 0;border-bottom:1px dashed var(--border)">
+          <div><b>${t}</b><div class="muted" style="font-size:12px">Not found</div></div>
+          <div>—</div>
+        </div>`;
+      }
+      const brand = det?.brand ? `<span class="chip">${det.brand}</span>` : '';
+      const size  = det?.size  ? `<span class="chip">${det.size}</span>`  : '';
+      const desc  = det?.desc  ? `<div class="muted" style="font-size:12px">${det.desc}</div>` : '';
+      return `<div style="display:grid;grid-template-columns:1fr auto;gap:8px;padding:6px 0;border-bottom:1px dashed var(--border)">
+        <div><b>${t}</b> ${brand} ${size} ${desc}</div>
+        <div><b>$${Number(price).toFixed(2)}</b></div>
+      </div>`;
+    }).join('');
+
+    const total = (s.total_price || 0).toFixed(2);
+    return `${rows}
+      <div style="text-align:right;margin-top:6px"><span class="chip"><b>Total: $${total}</b></span></div>`;
   }
 
   function highlightRow(sid, on){
@@ -678,22 +555,20 @@
   $resultFilter.addEventListener('input', ()=>{
     const q = $resultFilter.value.trim().toLowerCase();
     for (const tr of $tbody.querySelectorAll('tr')){
-      // skip drawer rows
-      if (!tr.dataset.sid) continue;
       tr.style.display = tr.innerText.toLowerCase().includes(q) ? '' : 'none';
-      const drawer = tr.nextElementSibling;
-      if (drawer && !tr.style.display) drawer.style.display = 'none';
     }
   });
 
   // compare two stores
   function wireCompareCheckboxes(){
     comparing = [];
+    document.getElementById('comparePanel').classList.remove('active');
     document.querySelectorAll('.cmp').forEach(cb=>{
       cb.addEventListener('change', e=>{
         const sid = parseInt(e.target.dataset.sid, 10);
         const store = lastResults.rows.find(r=>r.store_id === sid);
         if (!store) return;
+
         if (e.target.checked){
           if (comparing.length >= 2){
             const first = document.querySelector(`.cmp[data-sid="${comparing[0].store_id}"]`);
@@ -704,92 +579,38 @@
         } else {
           comparing = comparing.filter(s=>s.store_id !== sid);
         }
-        // simple highlight both
-        document.querySelectorAll('tr').forEach(tr=>tr.classList.remove('compare'));
-        comparing.forEach(s=>{
-          const tr = $tbody.querySelector(`tr[data-sid="${s.store_id}"]`);
-          if (tr) tr.classList.add('compare');
-        });
+        updateComparePanel();
       });
     });
   }
-
-  // === Kroger auth/cart (optional; safe if backend lacks endpoints) ===
-  async function fetchKrogerAuthStatus(){
-    try{
-      const r = await fetch('/api/kroger/status');
-      if (!r.ok) return;
-      const j = await r.json();
-      if (j && j.authorized){
-        $authHint.innerHTML = '<span class="chip">Kroger: signed in</span>';
-      } else {
-        $authHint.innerHTML = lastResults.source==='kroger'
-          ? '<a href="/api/kroger/login" class="chip" style="text-decoration:none">Sign in to Kroger for cart</a>'
-          : '';
-      }
-    }catch{ /* ignore */ }
+  function updateComparePanel(){
+    const panel = document.getElementById('comparePanel');
+    const [a,b] = comparing;
+    panel.classList.toggle('active', comparing.length > 0);
+    const $a = document.getElementById('cmpA');
+    const $b = document.getElementById('cmpB');
+    $a.innerHTML = a ? cmpHtml(a) : 'Select any 2 stores to compare.';
+    $b.innerHTML = b ? cmpHtml(b) : '';
   }
-  function wireCartButtons(){
-    document.querySelectorAll('.addCartBtn').forEach(btn=>{
-      btn.addEventListener('click', async ()=>{
-        const sid = parseInt(btn.dataset.sid, 10);
-        const store = lastResults.rows.find(r=>r.store_id===sid);
-        if (!store) return;
-        try{
-          const req = {
-            store_id: sid,
-            items: (store.kroger_products||[]).flatMap(g=>{
-              if (!g.items || !g.items.length) return [];
-              // choose the cheapest option per token
-              const best = [...g.items].sort((a,b)=>(+a.price)-(+b.price))[0];
-              return best && best.productId ? [{productId: best.productId, qty: 1}] : [];
-            })
-          };
-          if (!req.items.length){ alert('No Kroger-matched items to add.'); return; }
-          const r = await fetch('/api/kroger/cart', {method:'POST', headers:{'Content-Type':'application/json'}, body: JSON.stringify(req)});
-          const j = await r.json().catch(()=>({}));
-          if (r.ok){ alert('Added to Kroger cart!'); }
-          else { alert('Cart error: ' + (j.error||r.statusText)); }
-        }catch(e){ alert('Cart error: ' + e); }
-      });
-    });
+  function cmpHtml(s){
+    return `
+      <div style="font-weight:700">${s.store_name}${s.city?` <span class="muted">· ${s.city}</span>`:''}</div>
+      <div class="kpi" style="margin-top:6px">
+        <span class="chip"><b>${s.distance_miles.toFixed(2)} mi</b></span>
+        <span class="chip"><b>$${(s.total_price||0).toFixed(2)}</b></span>
+        <span class="chip"><b>${s.items_found}</b> items</span>
+        <span class="chip"><b>${s.score.toFixed(2)}</b> score</span>
+      </div>
+      ${Array.isArray(s.items_missing)&&s.items_missing.length?`<div class="muted" style="margin-top:6px">Missing: ${s.items_missing.join(', ')}</div>`:''}`;
   }
 
-  // === Share URL & CSV ===
-  document.getElementById('shareBtn').onclick = ()=>{
-    const u = new URL(location.href);
-    u.searchParams.set('lat', $lat.value);
-    u.searchParams.set('lon', $lon.value);
-    u.searchParams.set('radius', $radius.value);
-    u.searchParams.set('lambda', $lambda.value);
-    u.searchParams.set('source', $source.value);
-    u.searchParams.set('items', selectedItemsCSV());
-    navigator.clipboard.writeText(u.toString()).then(()=>alert('URL copied to clipboard'));
-  };
-
-  document.getElementById('csvBtn').onclick = ()=>{
-    if (!lastResults.rows.length){ alert('Run a search first.'); return; }
-    const lines = [['Store','Distance (mi)','Total ($)','Items Found','Missing']].concat(
-      lastResults.rows.map(s=>[
-        s.store_name,
-        s.distance_miles.toFixed(2),
-        (s.total_price||0).toFixed(2),
-        s.items_found||0,
-        (s.items_missing||[]).join(' ')
-      ])
-    );
-    const csv = lines.map(r=>r.map(x=>String(x).replace(/"/g,'""')).map(x=>`"${x}"`).join(',')).join('\n');
-    const blob = new Blob([csv], {type:'text/csv'});
-    const a = document.createElement('a');
-    a.href = URL.createObjectURL(blob);
-    a.download = 'closest-cheapest.csv';
-    a.click();
-  };
-
-  // init map from saved coords
-  (function init(){
+  // init from saved coords
+  (function initFromPrefs(){
     const lat = parseFloat($lat.value), lon = parseFloat($lon.value);
-    if (!isNaN(lat) && !isNaN(lon)){ ensureMap(lat, lon); drawRadius(lat, lon, +$radius.value || 10); }
+    if (!isNaN(lat) && !isNaN(lon)){
+      ensureMap(lat, lon);
+      drawRadius(lat, lon, +$radius.value || 10);
+    }
   })();
 </script>
 </body>
