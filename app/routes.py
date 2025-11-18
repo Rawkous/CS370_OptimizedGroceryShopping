@@ -7,15 +7,13 @@ from mysql.connector import Error  # type: ignore
 from .db import query
 from .logic import demo_store_scoring, check_items_in_price_history, simulate_route
 from .index_fallback import INDEX_FALLBACK
-from .kroger import search_kroger  # new
+from .kroger import search_kroger
 
-# Resolve project root robustly (…/CS370_OptimizedGroceryShopping)
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
 
 root_bp = Blueprint("root", __name__)
 api_bp  = Blueprint("api", __name__)
 
-# ---------- root (serve real index.html or fallback) ----------
 @root_bp.get("/")
 def root():
     index_path = PROJECT_ROOT / "index.html"
@@ -23,17 +21,14 @@ def root():
         return send_from_directory(str(PROJECT_ROOT), "index.html")
     return Response(INDEX_FALLBACK, mimetype="text/html")
 
-# Quiet the favicon probe
 @root_bp.get("/favicon.ico")
 def favicon():
     return ("", 204)
 
-# Some Chrome devtools do this probe—return empty JSON to avoid log noise
 @root_bp.get("/.well-known/appspecific/com.chrome.devtools.json")
 def chrome_devtools_probe():
     return jsonify({})
 
-# ---------- health ----------
 @api_bp.get("/healthz")
 def health():
     try:
@@ -44,23 +39,14 @@ def health():
             "port": int(os.getenv("DB_PORT", "3306")),
         })
     except Error as e:
-        return jsonify({
-            "ok": False, "error": str(e),
-            "host": os.getenv("DB_HOST"),
-            "port": int(os.getenv("DB_PORT", "3306")),
-        }), 500
+        return jsonify({"ok": False, "error": str(e),
+                        "host": os.getenv("DB_HOST"),
+                        "port": int(os.getenv("DB_PORT", "3306"))}), 500
     except Exception as e:
         return jsonify({"ok": False, "error": str(e)}), 500
 
-# ---------- items (picker) ----------
 @api_bp.get("/api/items")
 def api_items():
-    """
-    Return distinct product names that appear in at least one store (store_product join).
-    Optional query params:
-      - ?q=<substring>
-      - ?limit=<N> (default 50, max 200)
-    """
     q = (request.args.get("q") or "").strip()
     try:
         limit = max(1, min(200, int(request.args.get("limit", "50"))))
@@ -82,20 +68,17 @@ def api_items():
         LIMIT %s
     """
     params.append(limit)
-
     try:
         rows = query(sql, tuple(params))
         return jsonify([r["item_name"] for r in rows])
     except Exception as e:
         return jsonify({"error": f"DB error: {e}"}), 500
 
-# ---------- search (score + distance) ----------
 @api_bp.get("/api/search")
 def api_search():
-    # 1) Parse inputs
+    # inputs
     try:
-        lat = float(request.args["lat"])
-        lon = float(request.args["lon"])
+        lat = float(request.args["lat"]); lon = float(request.args["lon"])
     except Exception:
         return jsonify({"error": "lat and lon are required floats"}), 400
 
@@ -108,25 +91,20 @@ def api_search():
     except Exception:
         return jsonify({"error": "radius_miles and lambda_per_mile must be numbers"}), 400
 
-    # 2) If source=kroger → use live Kroger API and return early
     source = (request.args.get("source") or "").lower()
     if source == "kroger":
         try:
             payload = search_kroger(lat, lon, items_tokens, int(radius_miles), float(lambda_per_mile))
             return jsonify({
-                "query": {
-                    "lat": lat, "lon": lon,
-                    "radius_miles": radius_miles,
-                    "items": items_tokens,
-                    "lambda_per_mile": lambda_per_mile,
-                    "source": "kroger"
-                },
+                "query": {"lat": lat, "lon": lon, "radius_miles": radius_miles,
+                          "items": items_tokens, "lambda_per_mile": lambda_per_mile,
+                          "source": "kroger"},
                 **payload
             })
         except Exception as e:
             return jsonify({"error": f"Kroger error: {e}"}), 500
 
-    # 3) Default path: DB-backed search
+    # DB path (unchanged)
     radius_m = radius_miles * 1609.34
     base_sql = """
         SELECT
@@ -154,17 +132,13 @@ def api_search():
     except Exception as e:
         return jsonify({"error": f"DB error: {e}"}), 500
 
-    # Aggregate cheapest price per token per store
     stores = {}
     for r in rows:
         sid = r["id"]
         s = stores.setdefault(sid, {
-            "store_id": sid,
-            "store_name": r["name"],
-            "lat": float(r["latitude"]),
-            "lon": float(r["longitude"]),
-            "distance_miles": float(r["meters"]) / 1609.34,
-            "items": {},  # token -> min price
+            "store_id": sid, "store_name": r["name"],
+            "lat": float(r["latitude"]), "lon": float(r["longitude"]),
+            "distance_miles": float(r["meters"]) / 1609.34, "items": {},
         })
         item_name = (r["item_name"] or "").lower()
         price = r["price"]
@@ -176,7 +150,6 @@ def api_search():
                     if prev is None or pval < prev:
                         s["items"][token] = pval
 
-    # Build results and scores
     results = []
     for s in stores.values():
         if items_tokens:
@@ -200,18 +173,12 @@ def api_search():
     partial.sort(key=lambda s: (len(s["items_missing"]), s["total_price"] or 1e9, s["distance_miles"]))
 
     return jsonify({
-        "query": {
-            "lat": lat, "lon": lon,
-            "radius_miles": radius_miles,
-            "items": items_tokens,
-            "lambda_per_mile": lambda_per_mile
-        },
+        "query": {"lat": lat, "lon": lon, "radius_miles": radius_miles,
+                  "items": items_tokens, "lambda_per_mile": lambda_per_mile},
         "best": (full[0] if full else (partial[0] if partial else None)),
-        "stores_full": full,
-        "stores_partial": partial
+        "stores_full": full, "stores_partial": partial
     })
 
-# ---------- small helpers ----------
 @api_bp.get("/api/check-items")
 def api_check_items():
     items_raw = request.args.get("items", "")
