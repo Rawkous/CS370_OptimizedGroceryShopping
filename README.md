@@ -1,6 +1,41 @@
 Overview
 
-// QUICK START AT THE BOTTOM //
+// QUICK START 
+✅ Remove old folder + clone fresh repo
+1. Go to your home directory
+cd ~
+
+2. Delete the old project folder
+
+⚠️ Careful — this permanently deletes the folder.
+
+rm -rf ~/CS370_OptimizedGroceryShopping
+
+3. Clone a fresh copy from GitHub
+git clone https://github.com/Rawkous/CS370_OptimizedGroceryShopping.git
+
+4. Enter the project
+cd CS370_OptimizedGroceryShopping
+
+✅ Rebuild Python environment
+5. Create a new venv
+python3 -m venv .venv
+
+6. Activate it
+source .venv/bin/activate
+
+7. Install dependencies
+pip install -U pip
+pip install -r requirements.txt
+
+🚀 Run the app
+python app.py
+
+
+or if using your CLI:
+
+python -m app.cli web
+ //
 
 Project Title: Closest & Cheapest Store Finder
 Team: SDD_003
