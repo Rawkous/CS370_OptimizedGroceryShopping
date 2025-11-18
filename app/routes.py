@@ -14,6 +14,8 @@ PROJECT_ROOT = Path(__file__).resolve().parents[1]
 root_bp = Blueprint("root", __name__)
 api_bp  = Blueprint("api", __name__)
 
+
+# ---------- root (serve index) ----------
 @root_bp.get("/")
 def root():
     index_path = PROJECT_ROOT / "index.html"
@@ -21,14 +23,18 @@ def root():
         return send_from_directory(str(PROJECT_ROOT), "index.html")
     return Response(INDEX_FALLBACK, mimetype="text/html")
 
+
 @root_bp.get("/favicon.ico")
 def favicon():
     return ("", 204)
+
 
 @root_bp.get("/.well-known/appspecific/com.chrome.devtools.json")
 def chrome_devtools_probe():
     return jsonify({})
 
+
+# ---------- health ----------
 @api_bp.get("/healthz")
 def health():
     try:
@@ -39,12 +45,17 @@ def health():
             "port": int(os.getenv("DB_PORT", "3306")),
         })
     except Error as e:
-        return jsonify({"ok": False, "error": str(e),
-                        "host": os.getenv("DB_HOST"),
-                        "port": int(os.getenv("DB_PORT", "3306"))}), 500
+        return jsonify({
+            "ok": False,
+            "error": str(e),
+            "host": os.getenv("DB_HOST"),
+            "port": int(os.getenv("DB_PORT", "3306")),
+        }), 500
     except Exception as e:
         return jsonify({"ok": False, "error": str(e)}), 500
 
+
+# ---------- items (picker) ----------
 @api_bp.get("/api/items")
 def api_items():
     q = (request.args.get("q") or "").strip()
@@ -74,11 +85,14 @@ def api_items():
     except Exception as e:
         return jsonify({"error": f"DB error: {e}"}), 500
 
+
+# ---------- search (DB + Kroger) ----------
 @api_bp.get("/api/search")
 def api_search():
-    # inputs
+    # 1) Parse inputs
     try:
-        lat = float(request.args["lat"]); lon = float(request.args["lon"])
+        lat = float(request.args["lat"])
+        lon = float(request.args["lon"])
     except Exception:
         return jsonify({"error": "lat and lon are required floats"}), 400
 
@@ -91,20 +105,32 @@ def api_search():
     except Exception:
         return jsonify({"error": "radius_miles and lambda_per_mile must be numbers"}), 400
 
+    # 2) Kroger path
     source = (request.args.get("source") or "").lower()
     if source == "kroger":
         try:
-            payload = search_kroger(lat, lon, items_tokens, int(radius_miles), float(lambda_per_mile))
+            payload = search_kroger(
+                lat,
+                lon,
+                items_tokens,
+                int(radius_miles),
+                float(lambda_per_mile),
+            )
             return jsonify({
-                "query": {"lat": lat, "lon": lon, "radius_miles": radius_miles,
-                          "items": items_tokens, "lambda_per_mile": lambda_per_mile,
-                          "source": "kroger"},
-                **payload
+                "query": {
+                    "lat": lat,
+                    "lon": lon,
+                    "radius_miles": radius_miles,
+                    "items": items_tokens,
+                    "lambda_per_mile": lambda_per_mile,
+                    "source": "kroger",
+                },
+                **payload,
             })
         except Exception as e:
             return jsonify({"error": f"Kroger error: {e}"}), 500
 
-    # DB path (unchanged)
+    # 3) DB path (unchanged)
     radius_m = radius_miles * 1609.34
     base_sql = """
         SELECT
@@ -136,9 +162,12 @@ def api_search():
     for r in rows:
         sid = r["id"]
         s = stores.setdefault(sid, {
-            "store_id": sid, "store_name": r["name"],
-            "lat": float(r["latitude"]), "lon": float(r["longitude"]),
-            "distance_miles": float(r["meters"]) / 1609.34, "items": {},
+            "store_id": sid,
+            "store_name": r["name"],
+            "lat": float(r["latitude"]),
+            "lon": float(r["longitude"]),
+            "distance_miles": float(r["meters"]) / 1609.34,
+            "items": {},
         })
         item_name = (r["item_name"] or "").lower()
         price = r["price"]
@@ -170,15 +199,29 @@ def api_search():
         full, partial = results, []
 
     full.sort(key=lambda s: (s["total_price"], s["distance_miles"]))
-    partial.sort(key=lambda s: (len(s["items_missing"]), s["total_price"] or 1e9, s["distance_miles"]))
+    partial.sort(
+        key=lambda s: (
+            len(s["items_missing"]),
+            s["total_price"] or 1e9,
+            s["distance_miles"],
+        )
+    )
 
     return jsonify({
-        "query": {"lat": lat, "lon": lon, "radius_miles": radius_miles,
-                  "items": items_tokens, "lambda_per_mile": lambda_per_mile},
+        "query": {
+            "lat": lat,
+            "lon": lon,
+            "radius_miles": radius_miles,
+            "items": items_tokens,
+            "lambda_per_mile": lambda_per_mile,
+        },
         "best": (full[0] if full else (partial[0] if partial else None)),
-        "stores_full": full, "stores_partial": partial
+        "stores_full": full,
+        "stores_partial": partial,
     })
 
+
+# ---------- small helpers ----------
 @api_bp.get("/api/check-items")
 def api_check_items():
     items_raw = request.args.get("items", "")
@@ -188,10 +231,12 @@ def api_check_items():
     except Exception as e:
         return jsonify({"error": f"DB error: {e}"}), 500
 
+
 @api_bp.get("/api/demo-scoring")
 def api_demo_scoring():
     best, results = demo_store_scoring()
     return jsonify({"best": best, "results": results})
+
 
 @api_bp.get("/api/sim-route")
 def api_sim_route():
