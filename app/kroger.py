@@ -1,44 +1,50 @@
 # app/kroger.py
 from __future__ import annotations
-import base64, os, time, math, json
-from typing import Dict, Any, List, Tuple, Optional
+
+import base64
+import math
+import os
+import time
+from typing import Any, Dict, List, Optional, Tuple
+
 import requests
 
-# ---- Config / base URLs ------------------------------------------------------
+KROGER_BASE = "https://api.kroger.com"
+TOKEN_URL = f"{KROGER_BASE}/v1/connect/oauth2/token"
+LOC_URL = f"{KROGER_BASE}/v1/locations"
+PROD_URL = f"{KROGER_BASE}/v1/products"
 
-def _api_base() -> str:
-    # Allow switching between prod and cert via env. Defaults to prod.
-    return os.getenv("KROGER_BASE", os.getenv("KROGER_ENV", "").lower() == "cert" and
-                     "https://api-ce.kroger.com" or "https://api.kroger.com")
+# Very simple in-memory token cache
+_token_cache: Dict[str, Any] = {"access_token": None, "exp": 0}
 
-def _token_url() -> str:
-    return f"{_api_base()}/v1/connect/oauth2/token"
 
-LOC_URL  = lambda: f"{_api_base()}/v1/locations"
-PROD_URL = lambda: f"{_api_base()}/v1/products"
-
-# ---- Token cache -------------------------------------------------------------
-
-_token_cache: Dict[str, Any] = {"access_token": None, "exp": 0, "key": ""}
+# ---------- auth helpers ----------
 
 def _b64_client() -> str:
-    cid = os.getenv("KROGER_CLIENT_ID", "").strip()
-    sec = os.getenv("KROGER_CLIENT_SECRET", "").strip()
+    cid = os.getenv("KROGER_CLIENT_ID", "")
+    sec = os.getenv("KROGER_CLIENT_SECRET", "")
     if not cid or not sec:
-        raise RuntimeError("KROGER_CLIENT_ID / KROGER_CLIENT_SECRET missing from .env")
-    return base64.b64encode(f"{cid}:{sec}".encode()).decode()
+        raise RuntimeError(
+            "KROGER_CLIENT_ID / KROGER_CLIENT_SECRET missing from .env"
+        )
+    raw = f"{cid}:{sec}".encode("utf-8")
+    return base64.b64encode(raw).decode("utf-8")
+
 
 def _get_token() -> str:
     """
-    Client-credentials token. For Locations, scope is N/A (omit).
-    For Products, include product.compact if you set it in .env.
+    Client-credentials token for Kroger APIs.
+    Uses KROGER_SCOPES_CLIENT (preferred) or KROGER_SCOPE (fallback).
     """
     now = time.time()
-    # Cache key should include base URL and scope (tokens differ across env/scope)
-    scope = os.getenv("KROGER_SCOPES_CLIENT", "").strip()
-    cache_key = f"{_api_base()}|{scope}"
-    if _token_cache["access_token"] and _token_cache["exp"] > now + 30 and _token_cache["key"] == cache_key:
+    if _token_cache["access_token"] and _token_cache["exp"] > now + 30:
         return _token_cache["access_token"]
+
+    # Prefer the new name, fall back to the old one
+    scope = (
+        os.getenv("KROGER_SCOPES_CLIENT")
+        or os.getenv("KROGER_SCOPE", "")
+    ).strip()
 
     headers = {
         "Authorization": f"Basic {_b64_client()}",
@@ -46,132 +52,166 @@ def _get_token() -> str:
         "Accept": "application/json",
     }
     data = {"grant_type": "client_credentials"}
-    # Only include scope if non-empty; Locations explicitly say N/A
-    if scope:
+    if scope and scope.upper() != "N/A":
         data["scope"] = scope
 
-    r = requests.post(_token_url(), headers=headers, data=data, timeout=20)
+    r = requests.post(TOKEN_URL, headers=headers, data=data, timeout=15)
     if r.status_code == 401:
-        raise RuntimeError("Kroger token unauthorized (check client id/secret and scopes).")
+        # Surface a very clear auth error
+        try:
+            body = r.json()
+        except Exception:
+            body = r.text
+        raise RuntimeError(
+            f"Kroger token request unauthorized (401). "
+            f"Check client id/secret and scopes. Response: {body}"
+        )
     try:
         r.raise_for_status()
-    except Exception as e:
-        # Surface Kroger's JSON error for easier debugging
+    except requests.HTTPError:
+        # Bubble up full body for easier debugging
         try:
-            raise RuntimeError(f"Token error: {r.status_code} {r.text}") from e
+            body = r.json()
         except Exception:
-            raise
+            body = r.text
+        raise RuntimeError(f"Kroger token HTTP {r.status_code}: {body}")
 
     j = r.json()
-    _token_cache.update({
-        "access_token": j["access_token"],
-        "exp": now + int(j.get("expires_in", 1700)),
-        "key": cache_key,
-    })
+    _token_cache["access_token"] = j["access_token"]
+    _token_cache["exp"] = now + int(j.get("expires_in", 1700))
     return _token_cache["access_token"]
 
-def _auth_headers():
-    return {"Authorization": f"Bearer {_get_token()}", "Accept": "application/json"}
 
-# ---- Helpers ----------------------------------------------------------------
+def _auth_headers() -> Dict[str, str]:
+    return {
+        "Authorization": f"Bearer {_get_token()}",
+        "Accept": "application/json",
+    }
+
+
+# ---------- small math helper ----------
 
 def _haversine(lat1: float, lon1: float, lat2: float, lon2: float) -> float:
-    R = 3958.8
-    dLat = math.radians(lat2 - lat1)
-    dLon = math.radians(lon2 - lon1)
-    a = (math.sin(dLat/2)**2
-         + math.cos(math.radians(lat1)) * math.cos(math.radians(lat2))
-         * math.sin(dLon/2)**2)
+    """
+    Great-circle distance in miles between two lat/lon points.
+    """
+    R = 3958.8  # Earth radius in miles
+    d_lat = math.radians(lat2 - lat1)
+    d_lon = math.radians(lon2 - lon1)
+    a = (
+        math.sin(d_lat / 2) ** 2
+        + math.cos(math.radians(lat1))
+        * math.cos(math.radians(lat2))
+        * math.sin(d_lon / 2) ** 2
+    )
     return 2 * R * math.atan2(math.sqrt(a), math.sqrt(1 - a))
 
-def _safe_coord(loc: Dict[str, Any]) -> Tuple[Optional[float], Optional[float]]:
-    # Spec: geolocation.latitude / geolocation.longitude; fallback to latLng "lat,lon"
-    geo = (loc.get("geolocation") or {})
-    lat = geo.get("latitude")
-    lon = geo.get("longitude")
-    if lat is None or lon is None:
-        latlng = (geo.get("latLng") or "").split(",")
-        if len(latlng) == 2:
-            try:
-                lat = float(latlng[0].strip()); lon = float(latlng[1].strip())
-            except Exception:
-                lat, lon = None, None
-    try:
-        return (None if lat is None else float(lat),
-                None if lon is None else float(lon))
-    except Exception:
-        return (None, None)
 
-# ---- API calls (aligned to the OpenAPI JSON you pasted) ---------------------
+# ---------- low-level Kroger API wrappers ----------
 
 def _get_locations(
     lat: float,
     lon: float,
     radius_miles: int,
-    limit: int = 25,
-    chain: Optional[str] = None,
+    limit: int = 20,
 ) -> List[Dict[str, Any]]:
+    """
+    Call Locations API: GET /v1/locations
+
+    Uses filter.latLong.near, filter.radiusInMiles, filter.limit
+    as shown in the OpenAPI document you pasted.
+    """
+    radius = max(1, min(int(radius_miles), 100))
+    limit = max(1, min(int(limit), 200))
+
     params = {
-        # NOTE: spec uses *.near keys
+        # NOTE: .near suffix to match spec
         "filter.latLong.near": f"{lat},{lon}",
-        "filter.radiusInMiles": str(max(1, min(int(radius_miles), 100))),
-        "filter.limit": str(max(1, min(int(limit), 200))),
+        "filter.radiusInMiles": str(radius),
+        "filter.limit": str(limit),
+        # optional: filter.chain, filter.department, etc could go here
     }
-    if chain:
-        params["filter.chain"] = chain
 
-    r = requests.get(LOC_URL(), headers=_auth_headers(), params=params, timeout=20)
-    if r.status_code >= 400:
-        # Include Kroger's error json if available
+    r = requests.get(LOC_URL, headers=_auth_headers(), params=params, timeout=15)
+    try:
+        r.raise_for_status()
+    except requests.HTTPError:
         try:
-            err = r.json()
-            raise RuntimeError(f"Locations error {r.status_code}: {json.dumps(err)}")
+            body = r.json()
         except Exception:
-            r.raise_for_status()
-    data = r.json().get("data", [])
-    return data
+            body = r.text
+        raise RuntimeError(f"Kroger locations HTTP {r.status_code}: {body}")
 
-def _get_products(term: str, location_id: str, limit: int = 8) -> List[Dict[str, Any]]:
+    j = r.json() or {}
+    return j.get("data", [])
+
+
+def _get_products(
+    term: str,
+    location_id: str,
+    limit: int = 8,
+) -> List[Dict[str, Any]]:
     """
-    Products Public API (unchanged): needs product.compact scope on the token.
+    Call Products API: GET /v1/products
+
+    Requires product.compact scope on the token.
     """
+    limit = max(1, min(int(limit), 50))
     params = {
         "filter.term": term,
         "filter.locationId": location_id,
-        "filter.limit": str(max(1, min(int(limit), 50))),
+        "filter.limit": str(limit),
     }
-    r = requests.get(PROD_URL(), headers=_auth_headers(), params=params, timeout=25)
-    if r.status_code == 401:
-        raise RuntimeError("Products call unauthorized — token must include 'product.compact' scope.")
-    if r.status_code >= 400:
-        try:
-            raise RuntimeError(f"Products error {r.status_code}: {r.text}")
-        except Exception:
-            r.raise_for_status()
-    return r.json().get("data", [])
 
-def _pick_cheapest_item(products_json: List[Dict[str, Any]]) -> Tuple[float, Dict[str, Any]] | None:
-    best = None
+    r = requests.get(PROD_URL, headers=_auth_headers(), params=params, timeout=20)
+    try:
+        r.raise_for_status()
+    except requests.HTTPError:
+        try:
+            body = r.json()
+        except Exception:
+            body = r.text
+        raise RuntimeError(
+            f"Kroger products HTTP {r.status_code} for term={term!r}, "
+            f"location_id={location_id!r}: {body}"
+        )
+
+    j = r.json() or {}
+    return j.get("data", [])
+
+
+def _pick_cheapest_item(
+    products_json: List[Dict[str, Any]]
+) -> Optional[Tuple[float, Dict[str, Any]]]:
+    """
+    From Kroger product payload, pick the cheapest item (by regular or promo price).
+    Returns (price, friendly_meta) or None.
+    """
+    best: Optional[Tuple[float, Dict[str, Any]]] = None
+
     for p in products_json:
         brand = p.get("brand") or ""
-        desc  = p.get("description") or ""
+        desc = p.get("description") or ""
         items = p.get("items") or []
         for it in items:
             size = it.get("size") or it.get("packageSize") or ""
-            pr = (it.get("price") or {})  # {"regular": X, "promo": Y}
-            price = None
-            if pr.get("promo"):
+            pr = it.get("price") or {}  # {"regular": X, "promo": Y}
+            price: Optional[float] = None
+            if "promo" in pr and pr["promo"] not in (None, 0):
                 price = float(pr["promo"])
-            elif pr.get("regular"):
+            elif "regular" in pr and pr["regular"] not in (None, 0):
                 price = float(pr["regular"])
-            if price is None: 
+            if price is None:
                 continue
+
             meta = {"brand": brand, "desc": desc, "size": size}
             if best is None or price < best[0]:
                 best = (price, meta)
+
     return best
 
-# ---- Orchestrator used by /api/search --------------------------------------
+
+# ---------- main integration used by /api/search ----------
 
 def search_kroger(
     lat: float,
@@ -179,32 +219,41 @@ def search_kroger(
     items_tokens: List[str],
     radius_miles: int,
     lambda_per_mile: float,
-    chain: Optional[str] = None,
 ) -> Dict[str, Any]:
     """
-    Returns { best, stores_full, stores_partial } matching the app's shape.
+    Shape the response to match your existing /api/search output:
+      { best, stores_full, stores_partial }
     """
-    locs = _get_locations(lat, lon, radius_miles, limit=200, chain=chain)
+    locs = _get_locations(lat, lon, radius_miles, limit=25)
 
     stores: List[Dict[str, Any]] = []
+
     for L in locs:
-        sid  = L.get("locationId") or ""
+        sid = str(L.get("locationId") or "")
         name = L.get("name") or "Store"
-        city = ((L.get("address") or {}).get("city")) or ""
-        s_lat, s_lon = _safe_coord(L)
-        if s_lat is None or s_lon is None or not sid:
+
+        geo = L.get("geolocation") or {}
+        s_lat = geo.get("latitude")
+        s_lon = geo.get("longitude")
+        if s_lat is None or s_lon is None:
+            # Skip locations without geo
             continue
 
+        s_lat = float(s_lat)
+        s_lon = float(s_lon)
         distance_miles = _haversine(lat, lon, s_lat, s_lon)
 
+        addr = L.get("address") or {}
+        city = addr.get("city") or ""
+
+        # For each token (e.g. 'milk', 'bananas'), query products at this location
         found_map: Dict[str, float] = {}
         missing: List[str] = []
-        details: Dict[str, Any] = {}
+        details: Dict[str, Any] = {}  # token -> {price, brand, size, desc}
 
-        # Per-item product lookup (cheapest)
         for t in items_tokens:
             try:
-                prods = _get_products(t, sid, limit=15)
+                prods = _get_products(t, sid, limit=10)
                 pick = _pick_cheapest_item(prods)
                 if pick:
                     price, meta = pick
@@ -213,7 +262,8 @@ def search_kroger(
                 else:
                     missing.append(t)
             except Exception as e:
-                # Soft-fail this token only; keep the rest
+                # Don't blow up the whole store because one term failed
+                print(f"[kroger] product lookup failed for {t!r} at {sid}: {e}")
                 missing.append(t)
 
         total = sum(found_map.values()) if items_tokens else 0.0
@@ -223,27 +273,37 @@ def search_kroger(
             "store_id": sid,
             "store_name": name,
             "city": city,
-            "chain": L.get("chain"),
-            "lat": float(s_lat),
-            "lon": float(s_lon),
+            "lat": s_lat,
+            "lon": s_lon,
             "distance_miles": round(distance_miles, 2),
             "items": found_map,
-            "items_details": details,
+            "items_details": details,  # for richer UI
             "items_found": len(found_map),
             "items_missing": missing,
             "total_price": round(total, 2),
             "score": round(score, 2),
         })
 
-    # Split & sort
+    # Split into full/partial and sort similar to DB path
     if items_tokens:
-        full    = [s for s in stores if not s["items_missing"]]
+        full = [s for s in stores if not s["items_missing"]]
         partial = [s for s in stores if s["items_missing"]]
     else:
         full, partial = stores, []
 
     full.sort(key=lambda s: (s["total_price"], s["distance_miles"]))
-    partial.sort(key=lambda s: (len(s["items_missing"]), s["total_price"] or 1e9, s["distance_miles"]))
+    partial.sort(
+        key=lambda s: (
+            len(s["items_missing"]),
+            s["total_price"] or 1e9,
+            s["distance_miles"],
+        )
+    )
 
     best = full[0] if full else (partial[0] if partial else None)
-    return {"best": best, "stores_full": full, "stores_partial": partial}
+
+    return {
+        "best": best,
+        "stores_full": full,
+        "stores_partial": partial,
+    }
