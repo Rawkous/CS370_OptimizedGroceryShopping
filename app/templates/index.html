@@ -4,11 +4,12 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1.0">
   <title>GrocoLoco</title>
+
   <style>
     body {
       margin: 0;
       height: 100vh;
-      background-color: #0a0a0a;
+      background-color: #00050d;
       display: flex;
       align-items: center;
       justify-content: center;
@@ -16,8 +17,10 @@
       overflow: hidden;
       color: white;
       font-family: system-ui, sans-serif;
+      position: relative;
     }
 
+    /* --- Logo Fade-in --- */
     #logo {
       opacity: 0;
       transform: scale(0.8);
@@ -29,6 +32,7 @@
       100% { opacity: 1; transform: scale(1); }
     }
 
+    /* --- Button Fade + Glow --- */
     #buttons {
       margin-top: 40px;
       display: none;
@@ -41,34 +45,90 @@
     }
 
     button {
-      margin: 10px;
-      padding: 12px 28px;
+      padding: 14px 34px;
       border: none;
-      border-radius: 8px;
-      background-color: #007bff;
+      border-radius: 12px;
+      background: #007bff;
       color: white;
-      font-size: 18px;
+      font-size: 20px;
       cursor: pointer;
-      transition: background-color 0.3s;
+      position: relative;
+      z-index: 10;
+      box-shadow: 0 0 12px rgba(0, 123, 255, 0.6);
+      animation: glow 2s infinite ease-in-out;
+      transition: transform .2s, box-shadow .2s;
     }
 
     button:hover {
-      background-color: #0056b3;
+      transform: scale(1.05);
+      box-shadow: 0 0 20px rgba(0, 123, 255, 1);
+    }
+
+    @keyframes glow {
+      0%, 100% { box-shadow: 0 0 10px rgba(0,123,255,0.4); }
+      50% { box-shadow: 0 0 22px rgba(0,123,255,0.9); }
+    }
+
+    /* --- Falling PNGs --- */
+    .falling {
+      position: absolute;
+      top: -120px;
+      width: 90px;
+      opacity: 0.9;
+      animation: fall linear forwards;
+      pointer-events: none;
+    }
+
+    @keyframes fall {
+      0% { transform: translateY(-150px) rotate(0deg); opacity: 1; }
+      100% { transform: translateY(110vh) rotate(360deg); opacity: 0; }
     }
   </style>
 </head>
+
 <body>
+
   <img id="logo" src="{{ url_for('static', filename='images/grocoloco_logo.png') }}" width="180" alt="GrocoLoco Logo">
+
   <div id="buttons">
-    <button onclick="location.href='/page2'">Login</button>
-    <button onclick="location.href='/page2'">Browse</button>
+    <button onclick="location.href='/page2'">Explore</button>
   </div>
 
   <script>
+    // Show button after logo animation
     setTimeout(() => {
       document.getElementById('buttons').style.display = 'block';
     }, 2200);
+
+    // Falling images
+    const images = [
+      "{{ url_for('static', filename='images/fall1.png') }}",
+      "{{ url_for('static', filename='images/fall2.png') }}",
+      "{{ url_for('static', filename='images/fall3.png') }}",
+      "{{ url_for('static', filename='images/fall4.png') }}",
+      "{{ url_for('static', filename='images/fall5.png') }}",
+      "{{ url_for('static', filename='images/fall6.png') }}",
+      "{{ url_for('static', filename='images/fall7.png') }}"
+    ];
+
+    function spawnFallingImage() {
+      const img = document.createElement("img");
+      img.src = images[Math.floor(Math.random() * images.length)];
+      img.classList.add("falling");
+
+      img.style.left = Math.random() * window.innerWidth + "px";
+      img.style.animationDuration = (5 + Math.random() * 5) + "s";
+
+      document.body.appendChild(img);
+
+      setTimeout(() => img.remove(), 11000);
+    }
+
+    // Start falling PNGs after 20 seconds
+    setTimeout(() => {
+      setInterval(spawnFallingImage, 600);
+    }, 20000);
   </script>
+
 </body>
 </html>
-
