@@ -1,7 +1,7 @@
 # app/routes.py
 import os
 from pathlib import Path
-from flask import Blueprint, jsonify, request, send_from_directory, Response
+from flask import Blueprint, jsonify, request, send_from_directory, Response, render_template
 from mysql.connector import Error  # type: ignore
 
 from .db import query
@@ -9,32 +9,52 @@ from .logic import demo_store_scoring, check_items_in_price_history, simulate_ro
 from .index_fallback import INDEX_FALLBACK
 from .kroger import search_kroger
 
+# Resolve root path (e.g., CS370_OptimizedGroceryShopping/)
 PROJECT_ROOT = Path(__file__).resolve().parents[1]
 
+# Blueprints
 root_bp = Blueprint("root", __name__)
 api_bp  = Blueprint("api", __name__)
 
+# ============================================================
+# FRONTEND ROUTES
+# ============================================================
 
-# ---------- root (serve index) ----------
 @root_bp.get("/")
-def root():
-    index_path = PROJECT_ROOT / "index.html"
-    if index_path.exists():
-        return send_from_directory(str(PROJECT_ROOT), "index.html")
-    return Response(INDEX_FALLBACK, mimetype="text/html")
+def homepage():
+    """
+    Serves the splash homepage (new index.html with logo + buttons).
+    """
+    splash_path = PROJECT_ROOT / "app" / "templates" / "index.html"
+    if splash_path.exists():
+        return render_template("index.html")
+    # Fallback: serve plain text if missing
+    return Response("<h1>Homepage not found</h1>", mimetype="text/html")
 
+
+@root_bp.get("/page2")
+def page2():
+    """
+    Serves the main GrocoLoco app page (formerly index.html).
+    """
+    return send_from_directory(str(PROJECT_ROOT), "page2.html")
 
 @root_bp.get("/favicon.ico")
 def favicon():
+    """Avoid 404 spam from browsers requesting /favicon.ico"""
     return ("", 204)
 
 
 @root_bp.get("/.well-known/appspecific/com.chrome.devtools.json")
 def chrome_devtools_probe():
+    """Avoid noisy Chrome devtools probes."""
     return jsonify({})
 
 
-# ---------- health ----------
+# ============================================================
+# HEALTH ENDPOINT
+# ============================================================
+
 @api_bp.get("/healthz")
 def health():
     try:
@@ -46,8 +66,7 @@ def health():
         })
     except Error as e:
         return jsonify({
-            "ok": False,
-            "error": str(e),
+            "ok": False, "error": str(e),
             "host": os.getenv("DB_HOST"),
             "port": int(os.getenv("DB_PORT", "3306")),
         }), 500
@@ -55,7 +74,10 @@ def health():
         return jsonify({"ok": False, "error": str(e)}), 500
 
 
-# ---------- items (picker) ----------
+# ============================================================
+# ITEM PICKER ENDPOINT
+# ============================================================
+
 @api_bp.get("/api/items")
 def api_items():
     q = (request.args.get("q") or "").strip()
@@ -86,10 +108,13 @@ def api_items():
         return jsonify({"error": f"DB error: {e}"}), 500
 
 
-# ---------- search (DB + Kroger) ----------
+# ============================================================
+# SEARCH ENDPOINT (DB + KROGER)
+# ============================================================
+
 @api_bp.get("/api/search")
 def api_search():
-    # 1) Parse inputs
+    # Parse inputs
     try:
         lat = float(request.args["lat"])
         lon = float(request.args["lon"])
@@ -105,32 +130,25 @@ def api_search():
     except Exception:
         return jsonify({"error": "radius_miles and lambda_per_mile must be numbers"}), 400
 
-    # 2) Kroger path
+    # Kroger path
     source = (request.args.get("source") or "").lower()
     if source == "kroger":
         try:
-            payload = search_kroger(
-                lat,
-                lon,
-                items_tokens,
-                int(radius_miles),
-                float(lambda_per_mile),
-            )
+            payload = search_kroger(lat, lon, items_tokens, int(radius_miles), float(lambda_per_mile))
             return jsonify({
                 "query": {
-                    "lat": lat,
-                    "lon": lon,
+                    "lat": lat, "lon": lon,
                     "radius_miles": radius_miles,
                     "items": items_tokens,
                     "lambda_per_mile": lambda_per_mile,
-                    "source": "kroger",
+                    "source": "kroger"
                 },
-                **payload,
+                **payload
             })
         except Exception as e:
             return jsonify({"error": f"Kroger error: {e}"}), 500
 
-    # 3) DB path (unchanged)
+    # DB path
     radius_m = radius_miles * 1609.34
     base_sql = """
         SELECT
@@ -199,29 +217,27 @@ def api_search():
         full, partial = results, []
 
     full.sort(key=lambda s: (s["total_price"], s["distance_miles"]))
-    partial.sort(
-        key=lambda s: (
-            len(s["items_missing"]),
-            s["total_price"] or 1e9,
-            s["distance_miles"],
-        )
-    )
+    partial.sort(key=lambda s: (len(s["items_missing"]),
+                                s["total_price"] or 1e9,
+                                s["distance_miles"]))
 
     return jsonify({
         "query": {
-            "lat": lat,
-            "lon": lon,
+            "lat": lat, "lon": lon,
             "radius_miles": radius_miles,
             "items": items_tokens,
-            "lambda_per_mile": lambda_per_mile,
+            "lambda_per_mile": lambda_per_mile
         },
         "best": (full[0] if full else (partial[0] if partial else None)),
         "stores_full": full,
-        "stores_partial": partial,
+        "stores_partial": partial
     })
 
 
-# ---------- small helpers ----------
+# ============================================================
+# ADDITIONAL API ENDPOINTS
+# ============================================================
+
 @api_bp.get("/api/check-items")
 def api_check_items():
     items_raw = request.args.get("items", "")
@@ -248,3 +264,4 @@ def api_sim_route():
     n = int(request.args.get("n", "5"))
     gas_rate = float(request.args.get("gas_rate", "0.05"))
     return jsonify(simulate_route(start_lat, start_lon, n, gas_rate))
+
