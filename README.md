@@ -188,15 +188,11 @@ Add route optimization visualization using Mapbox Directions API
 
 # Quickstart
 
-git clone https://github.com/Rawkous/CS370_OptimizedGroceryShopping.git
-cd CS370_OptimizedGroceryShopping
+1: git clone https://github.com/Rawkous/CS370_OptimizedGroceryShopping.git
 
-# Create a venv + install deps (works everywhere)
-python3 -m venv .venv
-. .venv/bin/activate
-pip install -U pip
-pip install -r requirements.txt
+2: cd CS370_OptimizedGroceryShopping
 
 # Run the app
-python app.py web
+
+3: make run
 
