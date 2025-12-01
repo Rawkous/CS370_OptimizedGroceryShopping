@@ -1,4 +1,3 @@
-# app/db.py
 import os
 from sshtunnel import SSHTunnelForwarder
 from mysql.connector import pooling, Error
@@ -7,9 +6,8 @@ _tunnel = None
 _pool = None
 
 
-# ---------------------------------------------------------
+
 # SSH Tunnel helper
-# ---------------------------------------------------------
 def _open_tunnel():
     global _tunnel
 
@@ -17,7 +15,7 @@ def _open_tunnel():
         return None
 
     if _tunnel is None:
-        print("🔐 Starting SSH tunnel to Blue...")
+        print("Starting SSH tunnel to Blue...")
 
         _tunnel = SSHTunnelForwarder(
             (os.getenv("SSH_HOST"), int(os.getenv("SSH_PORT"))),
@@ -27,11 +25,11 @@ def _open_tunnel():
                 os.getenv("REMOTE_DB_HOST"),
                 int(os.getenv("REMOTE_DB_PORT"))
             ),
-            local_bind_address=("127.0.0.1", 0)  # 0 = free port
+            local_bind_address=("127.0.0.1", 0)
         )
 
         _tunnel.start()
-        print(f"🔌 Tunnel active on local port {tunnel_port()}")
+        print(f"Tunnel active on local port {tunnel_port()}")
 
     return _tunnel
 
@@ -40,9 +38,6 @@ def tunnel_port():
     return _tunnel.local_bind_port if _tunnel else None
 
 
-# ---------------------------------------------------------
-# Build DB config
-# ---------------------------------------------------------
 def _db_config():
     tunnel = _open_tunnel()
 
@@ -63,10 +58,6 @@ def _db_config():
         "connection_timeout": 10,
     }
 
-
-# ---------------------------------------------------------
-# MySQL Connection Pool
-# ---------------------------------------------------------
 def _get_pool():
     global _pool
 
@@ -82,21 +73,18 @@ def _get_pool():
                 **cfg
             )
         except Error as e:
-            print("❌ Failed to create DB pool:", e)
+            print("Failed to create DB pool", e)
             _pool = None
 
     return _pool
 
 
-# ---------------------------------------------------------
-# PUBLIC QUERY FUNCTION (required by routes.py)
-# ---------------------------------------------------------
 def query(sql: str, params=()):
     pool = _get_pool()
 
     if pool is None:
         raise RuntimeError(
-            "Database pool is not available. Check SSH tunnel or DB credentials."
+            "Database pool is not available."
         )
 
     conn = pool.get_connection()
@@ -109,14 +97,13 @@ def query(sql: str, params=()):
         conn.close()
 
 
-# ---------------------------------------------------------
+
 # Simple health check
-# ---------------------------------------------------------
 def db_smoke_ok() -> bool:
     try:
         rows = query("SELECT 1 AS ok", ())
         return rows and rows[0].get("ok") == 1
     except Exception as e:
-        print("❌ DB FAILED:", e)
+        print("DB FAILED", e)
         return False
 
