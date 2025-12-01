@@ -1,5 +1,3 @@
-# tests/test_db_unit.py
-
 import pytest
 from python.app import db
 
@@ -9,7 +7,6 @@ def test_db_module_loads():
 
 
 def test_db_config_basic(monkeypatch):
-    """_db_config should return dict with expected keys even without a DB."""
     monkeypatch.setenv("DB_HOST", "localhost")
     monkeypatch.setenv("DB_PORT", "3306")
     monkeypatch.setenv("DB_USER", "testuser")
@@ -26,7 +23,6 @@ def test_db_config_basic(monkeypatch):
 
 
 def test_query_raises_when_pool_missing(monkeypatch):
-    """If pool is None, query() should raise RuntimeError."""
     def fake_pool():
         return None
 
@@ -34,3 +30,4 @@ def test_query_raises_when_pool_missing(monkeypatch):
 
     with pytest.raises(RuntimeError):
         db.query("SELECT 1")
+
