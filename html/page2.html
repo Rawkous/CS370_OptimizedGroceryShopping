@@ -458,7 +458,7 @@
       ${
         Array.isArray(best.items_missing) && best.items_missing.length
         ? `<div class="muted" style="margin-top:6px">Missing: ${best.items_missing.join(', ')}</div>`
-        : `<div class="muted" style="margin-top:6px">Missing: ❌</div>`
+        : `<div class="muted" style="margin-top:6px">Missing: N/A</div>`
       }`;
   }
 
@@ -477,7 +477,7 @@
       tr.dataset.sid = s.store_id;
 
       const missingArr = s.items_missing || [];
-      const missingText = missingArr.length ? missingArr.join(', ') : '❌';
+      const missingText = missingArr.length ? missingArr.join(', ') : 'N/A';
 
       tr.innerHTML = `
         <td>
