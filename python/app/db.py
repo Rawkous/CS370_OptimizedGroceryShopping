@@ -15,7 +15,7 @@ def _open_tunnel():
         return None
 
     if _tunnel is None:
-        print("Starting SSH tunnel to Blue...")
+        print("Starting SSH tunnel to Blue")
 
         _tunnel = SSHTunnelForwarder(
             (os.getenv("SSH_HOST"), int(os.getenv("SSH_PORT"))),
