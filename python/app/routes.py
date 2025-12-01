@@ -1,39 +1,27 @@
-# app/routes.py
 import os
 from pathlib import Path
 from flask import Blueprint, jsonify, request, send_from_directory, Response, render_template
-from mysql.connector import Error  # type: ignore
+from mysql.connector import Error  
 
 from .db import query
 from .logic import demo_store_scoring, check_items_in_price_history, simulate_route
 from .index_fallback import INDEX_FALLBACK
 from .kroger import search_kroger
 
-# Resolve root path (e.g., CS370_OptimizedGroceryShopping/)
 PROJECT_ROOT = Path(__file__).resolve().parents[2]
 
-# Blueprints
 root_bp = Blueprint("root", __name__)
 api_bp  = Blueprint("api", __name__)
 
-# ============================================================
-# FRONTEND ROUTES
-# ============================================================
 
 @root_bp.get("/")
 def homepage():
-    """
-    Serves the splash homepage.
-    """
     return render_template("index.html")
 
 
 
 @root_bp.get("/page2")
 def page2():
-    """
-    Serves the main GrocoLoco app page.
-    """
     html_dir = PROJECT_ROOT / "html"
     return send_from_directory(str(html_dir), "page2.html")
 
@@ -41,19 +29,16 @@ def page2():
 
 @root_bp.get("/favicon.ico")
 def favicon():
-    """Avoid 404 spam from browsers requesting /favicon.ico"""
     return ("", 204)
 
 
 @root_bp.get("/.well-known/appspecific/com.chrome.devtools.json")
 def chrome_devtools_probe():
-    """Avoid noisy Chrome devtools probes."""
     return jsonify({})
 
 
-# ============================================================
+
 # HEALTH ENDPOINT
-# ============================================================
 
 @api_bp.get("/healthz")
 def health():
@@ -74,9 +59,8 @@ def health():
         return jsonify({"ok": False, "error": str(e)}), 500
 
 
-# ============================================================
+
 # ITEM PICKER ENDPOINT
-# ============================================================
 
 @api_bp.get("/api/items")
 def api_items():
@@ -108,13 +92,10 @@ def api_items():
         return jsonify({"error": f"DB error: {e}"}), 500
 
 
-# ============================================================
-# SEARCH ENDPOINT (DB + KROGER)
-# ============================================================
 
+# SEARCH ENDPOINT (DB + KROGER)
 @api_bp.get("/api/search")
 def api_search():
-    # Parse inputs
     try:
         lat = float(request.args["lat"])
         lon = float(request.args["lon"])
@@ -130,7 +111,7 @@ def api_search():
     except Exception:
         return jsonify({"error": "radius_miles and lambda_per_mile must be numbers"}), 400
 
-    # Kroger path
+    
     source = (request.args.get("source") or "").lower()
     if source == "kroger":
         try:
@@ -148,7 +129,7 @@ def api_search():
         except Exception as e:
             return jsonify({"error": f"Kroger error: {e}"}), 500
 
-    # DB path
+    
     radius_m = radius_miles * 1609.34
     base_sql = """
         SELECT
@@ -234,10 +215,7 @@ def api_search():
     })
 
 
-# ============================================================
 # ADDITIONAL API ENDPOINTS
-# ============================================================
-
 @api_bp.get("/api/check-items")
 def api_check_items():
     items_raw = request.args.get("items", "")
