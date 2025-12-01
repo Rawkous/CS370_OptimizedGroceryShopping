@@ -1,11 +1,10 @@
-# app/logic.py
 import math
 import random
 from typing import List, Tuple, Dict, Any
 
 from .db import query
 
-# --- geometry ---
+
 def haversine(lat1, lon1, lat2, lon2):
     """Great-circle distance (miles)."""
     R = 3958.8
@@ -35,7 +34,6 @@ def find_shortest_route(start: Tuple[float, float], items: List[Tuple[float, flo
         remaining.remove(nxt)
     return route, total_distance
 
-# --- demo scoring ---
 def demo_store_scoring():
     stores = [
         {"name": "Supermarket", "inventory": ['banana', 'egg', 'bread', 'soda', 'cookies', 'sugar'], "distance": 5},
@@ -62,7 +60,6 @@ def demo_store_scoring():
             best, best_score = row, score
     return best, results
 
-# --- item existence check (via price_history join) ---
 def check_items_in_price_history(items: List[str]) -> Dict[str, Any]:
     if not items:
         return {"found": [], "missing": []}
@@ -78,7 +75,7 @@ def check_items_in_price_history(items: List[str]) -> Dict[str, Any]:
     missing = [i for i in (x.lower() for x in items) if i not in found]
     return {"found": found, "missing": missing}
 
-# --- simulation helper used by API and CLI ---
+
 def simulate_route(start_lat: float, start_lon: float, n: int = 5, gas_rate: float = 0.05):
     items = [(random.uniform(-90, 90), random.uniform(-180, 180)) for _ in range(n)]
     route, total_distance = find_shortest_route((start_lat, start_lon), items)
