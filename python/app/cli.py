@@ -1,4 +1,3 @@
-# app/cli.py
 import os
 import argparse
 from dotenv import load_dotenv
@@ -23,17 +22,14 @@ def _print_db_target():
 
 
 def main():
-    # Load .env and start SSH tunnel (for DB-backed modes)
     load_dotenv()
     maybe_start_tunnel()
 
     parser = argparse.ArgumentParser(description="Closest & Cheapest — unified app")
     sub = parser.add_subparsers(dest="cmd")
 
-    # ---------- Web ----------
     sub.add_parser("web", help="Run the web server (default)")
 
-    # ---------- DB / logic helpers ----------
     p_check = sub.add_parser(
         "check-items",
         help="Console: check item names in price_history via product join",
@@ -54,7 +50,7 @@ def main():
 
     sub.add_parser("db-check", help="Console: simple DB health check")
 
-    # ---------- Kroger smoke tests ----------
+    # Kroger tests 
     sub.add_parser("kroger-token", help="Fetch OAuth token (client_credentials)")
 
     p_k_loc = sub.add_parser("kroger-locations", help="List Kroger locations near lat/lon")
@@ -83,10 +79,10 @@ def main():
 
     _print_db_target()
 
-    # ---------- Handlers ----------
+    # Handlers
     if cmd == "web":
         # DB smoke + web app
-        print("✅ DB OK" if db_smoke_ok() else "❌ DB FAILED: see logs above")
+        print("DB OK" if db_smoke_ok() else "DB FAILED")
         app = create_app()
         app.run(
             host=os.getenv("HOST", "0.0.0.0"),
@@ -117,15 +113,15 @@ def main():
         )
 
     elif cmd == "db-check":
-        print("✅ DB OK" if db_smoke_ok() else "❌ DB FAILED")
+        print("DB OK" if db_smoke_ok() else "DB FAILED")
 
-    # ---------- Kroger ----------
+    #  Kroger 
     elif cmd == "kroger-token":
         try:
             tok = kroger_get_token()
-            print("✅ Token acquired. length:", len(tok))
+            print("Token acquired. length:", len(tok))
         except Exception as e:
-            print("❌ Token error:", e)
+            print("Token error:", e)
 
     elif cmd == "kroger-locations":
         try:
@@ -137,7 +133,7 @@ def main():
                 print(f"{lid} - {name} @ {city}")
             print(f"Total locations: {len(locs)}")
         except Exception as e:
-            print("❌ Locations error:", e)
+            print("Locations error:", e)
 
     elif cmd == "kroger-products":
         try:
@@ -153,7 +149,7 @@ def main():
                 print(f"- {brand} | {desc[:80]} | ${price}")
             print(f"Total products: {len(prods)}")
         except Exception as e:
-            print("❌ Products error:", e)
+            print("Products error:", e)
 
     elif cmd == "kroger-check":
         try:
@@ -187,7 +183,7 @@ def main():
                 len(out["stores_partial"]),
             )
         except Exception as e:
-            print("❌ Kroger check error:", e)
+            print("Kroger check error:", e)
 
 
 if __name__ == "__main__":
