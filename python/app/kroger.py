@@ -1,4 +1,3 @@
-# app/kroger.py
 from __future__ import annotations
 
 import os
@@ -9,24 +8,21 @@ from typing import Dict, Any, List, Tuple, Optional
 import requests
 from requests.auth import HTTPBasicAuth
 
-# Use CERT by default; switch to PROD by setting KROGER_BASE in .env
 KROGER_BASE = os.getenv("KROGER_BASE", "https://api-ce.kroger.com").rstrip("/")
 TOKEN_URL   = f"{KROGER_BASE}/v1/connect/oauth2/token"
 LOC_URL     = f"{KROGER_BASE}/v1/locations"
 PROD_URL    = f"{KROGER_BASE}/v1/products"
 
-# Simple token cache so we don't request a token for every call
+
 _token_cache: Dict[str, Any] = {"access_token": None, "exp": 0, "base": KROGER_BASE}
 
 def _desired_scope() -> str:
-    # Allow either KROGER_SCOPE or KROGER_SCOPES_CLIENT; empty is OK for Locations-only
     s = (os.getenv("KROGER_SCOPE") or os.getenv("KROGER_SCOPES_CLIENT") or "").strip()
     return " ".join(s.split())
 
 def _get_token() -> str:
     now = time.time()
 
-    # Invalidate cache if base host changed
     if _token_cache.get("base") != KROGER_BASE:
         _token_cache.update({"access_token": None, "exp": 0, "base": KROGER_BASE})
 
@@ -36,7 +32,7 @@ def _get_token() -> str:
     cid  = os.environ.get("KROGER_CLIENT_ID")
     csec = os.environ.get("KROGER_CLIENT_SECRET")
     if not cid or not csec:
-        raise RuntimeError("KROGER_CLIENT_ID / KROGER_CLIENT_SECRET missing from environment")
+        raise RuntimeError("KROGER_CLIENT_ID / KROGER_CLIENT_SECRET")
 
     data = {"grant_type": "client_credentials"}
     scope = _desired_scope()
@@ -45,8 +41,8 @@ def _get_token() -> str:
 
     r = requests.post(
         TOKEN_URL,
-        data=data,  # form-encoded (not JSON)
-        auth=HTTPBasicAuth(cid, csec),  # Basic auth with client_id:client_secret
+        data=data,  
+        auth=HTTPBasicAuth(cid, csec),  
         headers={
             "Accept": "application/json",
             "Content-Type": "application/x-www-form-urlencoded",
@@ -70,7 +66,7 @@ def _auth_headers() -> Dict[str, str]:
     return {"Authorization": f"Bearer {_get_token()}", "Accept": "application/json"}
 
 def _haversine(lat1: float, lon1: float, lat2: float, lon2: float) -> float:
-    R = 3958.8  # miles
+    R = 3958.8  
     dLat = math.radians(lat2 - lat1)
     dLon = math.radians(lon2 - lon1)
     a = (math.sin(dLat / 2) ** 2
@@ -95,7 +91,6 @@ def _extract_lat_lon(L: Dict[str, Any]) -> Optional[Tuple[float, float]]:
 
 def _get_locations(lat: float, lon: float, radius_miles: int, limit: int = 20,
                    chain: Optional[str] = None) -> List[Dict[str, Any]]:
-    # Per OpenAPI: filter.latLong.near, filter.radiusInMiles, filter.limit, filter.chain
     params = {
         "filter.latLong.near": f"{lat},{lon}",
         "filter.radiusInMiles": str(max(1, min(int(radius_miles), 100))),
@@ -180,7 +175,6 @@ def search_kroger(lat: float, lon: float, items_tokens: List[str], radius_miles:
                 else:
                     missing.append(t)
             except Exception:
-                # Treat any product lookup failure as "missing"
                 missing.append(t)
 
         total = sum(found_map.values()) if items_tokens else 0.0
