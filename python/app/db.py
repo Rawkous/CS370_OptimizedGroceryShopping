@@ -64,7 +64,7 @@ def _get_pool():
     if _pool is None:
         cfg = _db_config()
 
-        print("📡 Connecting to MySQL with config:", cfg)
+        print("Connecting to MySQL with config:", cfg)
 
         try:
             _pool = pooling.MySQLConnectionPool(
