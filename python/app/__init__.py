@@ -8,7 +8,6 @@ from pathlib import Path
 def create_app() -> Flask:
     load_dotenv()
 
-    # PROJECT_ROOT is two levels up from this file: .../GroceryAppClean/python/app/__init__.py
     project_root = Path(__file__).resolve().parents[2]
 
     app = Flask(
@@ -22,3 +21,4 @@ def create_app() -> Flask:
     app.register_blueprint(api_bp)
 
     return app
+
