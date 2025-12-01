@@ -89,7 +89,4 @@ clean:
 	find . -name "*.pyc" -delete
 	@echo "Clean complete."
 
-.PHONY: test
-test: install
-	@echo "Running tests..."
-	$(VENV_PY) -m pytest -q
+
