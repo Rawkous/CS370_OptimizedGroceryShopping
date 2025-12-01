@@ -10,7 +10,7 @@ from .index_fallback import INDEX_FALLBACK
 from .kroger import search_kroger
 
 # Resolve root path (e.g., CS370_OptimizedGroceryShopping/)
-PROJECT_ROOT = Path(__file__).resolve().parents[1]
+PROJECT_ROOT = Path(__file__).resolve().parents[2]
 
 # Blueprints
 root_bp = Blueprint("root", __name__)
@@ -23,21 +23,21 @@ api_bp  = Blueprint("api", __name__)
 @root_bp.get("/")
 def homepage():
     """
-    Serves the splash homepage (new index.html with logo + buttons).
+    Serves the splash homepage.
     """
-    splash_path = PROJECT_ROOT / "app" / "templates" / "index.html"
-    if splash_path.exists():
-        return render_template("index.html")
-    # Fallback: serve plain text if missing
-    return Response("<h1>Homepage not found</h1>", mimetype="text/html")
+    return render_template("index.html")
+
 
 
 @root_bp.get("/page2")
 def page2():
     """
-    Serves the main GrocoLoco app page (formerly index.html).
+    Serves the main GrocoLoco app page.
     """
-    return send_from_directory(str(PROJECT_ROOT), "page2.html")
+    html_dir = PROJECT_ROOT / "html"
+    return send_from_directory(str(html_dir), "page2.html")
+
+
 
 @root_bp.get("/favicon.ico")
 def favicon():

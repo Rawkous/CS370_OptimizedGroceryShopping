@@ -88,7 +88,7 @@
 
 <body>
 
-  <img id="logo" src="{{ url_for('static', filename='images/grocoloco_logo.png') }}" width="180" alt="GrocoLoco Logo">
+  <img id="logo" src="{{ url_for('static', filename='grocoloco_logo.png') }}" width="180" alt="GrocoLoco Logo">
 
   <div id="buttons">
     <button onclick="location.href='/page2'">Explore</button>
@@ -102,13 +102,13 @@
 
     // Falling images
     const images = [
-      "{{ url_for('static', filename='images/fall1.png') }}",
-      "{{ url_for('static', filename='images/fall2.png') }}",
-      "{{ url_for('static', filename='images/fall3.png') }}",
-      "{{ url_for('static', filename='images/fall4.png') }}",
-      "{{ url_for('static', filename='images/fall5.png') }}",
-      "{{ url_for('static', filename='images/fall6.png') }}",
-      "{{ url_for('static', filename='images/fall7.png') }}"
+    "{{ url_for('static', filename='fall1.png') }}",
+    "{{ url_for('static', filename='fall2.png') }}",
+    "{{ url_for('static', filename='fall3.png') }}",
+    "{{ url_for('static', filename='fall4.png') }}",
+    "{{ url_for('static', filename='fall5.png') }}",
+    "{{ url_for('static', filename='fall6.png') }}",
+    "{{ url_for('static', filename='fall7.png') }}"
     ];
 
     function spawnFallingImage() {

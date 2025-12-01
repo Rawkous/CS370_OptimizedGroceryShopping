@@ -1,68 +1,95 @@
-# ---- Closest & Cheapest — Makefile -----------------------------------------
-# Usage:
-#   make run           # run web server (uses .env; SSH tunnel if enabled)
-#   make run-no-tunnel # run web server with USE_SSH_TUNNEL=0
-#   make setup         # create venv + install deps
-#   make check         # DB smoke check via CLI
-#   make health        # ping /healthz
-#   make db-reset      # apply schema + seed (requires DB_* in .env)
-#   make db-apply      # apply schema only
+# Makefile for GroceryAppClean / grocoLoco
+# Assumes structure:
+#  - python/app.py (entrypoint)
+#  - requirements.txt in project root
+#  - db/schema.sql, db/seed.sql
+#  - .env in project root
 
-# Optional .env include (no error if missing)
-ENV ?= .env
--include $(ENV)
+PYTHON      := python3
+VENV_DIR    := .venv
+VENV_PY     := $(VENV_DIR)/bin/python
+PIP         := $(VENV_PY) -m pip
 
-# Project-local virtualenv
-VENV ?= .venv
-PY   := $(VENV)/bin/python3
-PIP  := $(VENV)/bin/pip
+APP_ENTRY   := python/app.py
 
-.PHONY: help venv setup install run run-no-tunnel check health db-reset db-apply
+# --- Default target -------------------------------------------------------
 
+.PHONY: help
 help:
-	@echo "Targets:"
-	@echo "  make run            - run web server (uses .env; SSH tunnel if enabled)"
-	@echo "  make run-no-tunnel  - run web server with USE_SSH_TUNNEL=0"
-	@echo "  make setup          - create venv and install requirements"
-	@echo "  make check          - DB smoke check via CLI"
-	@echo "  make health         - curl /healthz"
-	@echo "  make db-reset       - apply schema + seed (requires DB_* in .env)"
-	@echo "  make db-apply       - apply schema only"
+	@echo "Available targets:"
+	@echo "  make venv        - create a virtual environment in $(VENV_DIR)/"
+	@echo "  make install     - install Python dependencies into the venv"
+	@echo "  make run         - run the Flask app via python/app.py"
+	@echo "  make db-schema   - apply database schema (requires DB_* env vars)"
+	@echo "  make db-seed     - seed the database with sample data"
+	@echo "  make db-reset    - schema + seed"
+	@echo "  make clean       - remove virtualenv and __pycache__ files"
 
-venv:
-	@test -d $(VENV) || python3 -m venv $(VENV)
+# --- Virtualenv & dependencies -------------------------------------------
 
-setup: venv
-	$(PIP) install -U pip
+$(VENV_DIR):
+	$(PYTHON) -m venv $(VENV_DIR)
+	# Make sure pip exists in the venv even on minimal installs
+	$(VENV_PY) -m ensurepip --upgrade || true
+
+.PHONY: venv
+venv: $(VENV_DIR)
+	@echo "Virtual environment ready in $(VENV_DIR)/"
+
+.PHONY: install
+install: venv
+	$(PIP) install --upgrade pip
 	$(PIP) install -r requirements.txt
+	@echo "Dependencies installed."
 
-# Run via our CLI entrypoint (loads env, starts optional tunnel, registers blueprints)
-run: setup
-	$(PY) -m app.cli web
+# --- Run app -------------------------------------------------------------
 
-# Force-disable the SSH tunnel for quick UI testing
-run-no-tunnel: setup
-	USE_SSH_TUNNEL=0 $(PY) -m app.cli web
+.PHONY: run
+run: install
+	@echo "Starting app..."
+	$(VENV_PY) $(APP_ENTRY)
 
-check: setup
-	$(PY) -m app.cli db-check
+# --- Database helpers ----------------------------------------------------
+# These assume you export the following in your shell or `.env`:
+#   DB_HOST, DB_USER, DB_PASSWORD, DB_NAME
 
-health:
-	curl -s http://127.0.0.1:5000/healthz | jq .
+MYSQL      := mysql
 
-db-reset:
-	@test -n "$(DB_HOST)" || (echo "DB_HOST missing in .env"; exit 1)
-	@test -n "$(DB_PORT)" || (echo "DB_PORT missing in .env"; exit 1)
-	@test -n "$(DB_USER)" || (echo "DB_USER missing in .env"; exit 1)
-	@test -n "$(DB_PASSWORD)" || (echo "DB_PASSWORD missing in .env"; exit 1)
-	@echo "Applying schema..."
-	mysql --host="$(DB_HOST)" --port="$(DB_PORT)" --user="$(DB_USER)" --password="$(DB_PASSWORD)" < db/schema.sql
-	@echo "Seeding data..."
-	mysql --host="$(DB_HOST)" --port="$(DB_PORT)" --user="$(DB_USER)" --password="$(DB_PASSWORD)" SDD_003_database < db/seed.sql
+.PHONY: db-schema
+db-schema:
+	@if [ -z "$$DB_HOST" ] || [ -z "$$DB_USER" ] || [ -z "$$DB_NAME" ]; then \
+		echo "Please set DB_HOST, DB_USER, DB_PASSWORD, DB_NAME environment variables."; \
+		exit 1; \
+	fi
+	@echo "Applying schema from db/schema.sql..."
+	@$(MYSQL) -h $$DB_HOST -u $$DB_USER -p$$DB_PASSWORD $$DB_NAME < db/schema.sql
+	@echo "Schema applied."
 
-db-apply:
-	@test -n "$(DB_HOST)" || (echo "DB_HOST missing in .env"; exit 1)
-	@test -n "$(DB_PORT)" || (echo "DB_PORT missing in .env"; exit 1)
-	@test -n "$(DB_USER)" || (echo "DB_USER missing in .env"; exit 1)
-	@test -n "$(DB_PASSWORD)" || (echo "DB_PASSWORD missing in .env"; exit 1)
-	mysql --host="$(DB_HOST)" --port="$(DB_PORT)" --user="$(DB_USER)" --password="$(DB_PASSWORD)" SDD_003_database < db/schema.sql
+.PHONY: db-seed
+db-seed:
+	@if [ -z "$$DB_HOST" ] || [ -z "$$DB_USER" ] || [ -z "$$DB_NAME" ]; then \
+		echo "Please set DB_HOST, DB_USER, DB_PASSWORD, DB_NAME environment variables."; \
+		exit 1; \
+	fi
+	@echo "Seeding database from db/seed.sql..."
+	@$(MYSQL) -h $$DB_HOST -u $$DB_USER -p$$DB_PASSWORD $$DB_NAME < db/seed.sql
+	@echo "Database seeded."
+
+.PHONY: db-reset
+db-reset: db-schema db-seed
+	@echo "Database reset (schema + seed)."
+
+# --- Cleanup -------------------------------------------------------------
+
+.PHONY: clean
+clean:
+	@echo "Removing virtualenv and Python cache files..."
+	rm -rf $(VENV_DIR)
+	find . -name "__pycache__" -type d -exec rm -rf {} +
+	find . -name "*.pyc" -delete
+	@echo "Clean complete."
+
+.PHONY: test
+test: install
+	@echo "Running tests..."
+	$(VENV_PY) -m pytest -q
