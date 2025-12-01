@@ -1,34 +1,27 @@
-# tests/test_logic.py
-
 import math
 from python.app import logic
 
 
 def test_haversine_zero_distance():
-    """Distance between identical points is 0."""
     assert logic.haversine(0, 0, 0, 0) == 0
 
 
 def test_haversine_known_distance():
-    """Sanity check using known distance: NYC to LA (~2445 miles)."""
     d = logic.haversine(40.7128, -74.0060, 34.0522, -118.2437)
     assert 2400 < d < 2500
 
 
 def test_find_shortest_route_ordering():
-    """Nearest-neighbor should always visit the closest next point."""
     start = (0, 0)
     pts = [
-        (0, 1),  # 1 unit away
-        (0, 5),  # 5 units away
-        (0, 3),  # 3 units away
+        (0, 1), 
+        (0, 5), 
+        (0, 3), 
     ]
     route, total = logic.find_shortest_route(start, pts)
 
-    # First hop must go to the nearest: (0,1)
     assert route[0]["to"] == (0, 1)
 
-    # Total is positive
     assert total > 0
 
 
@@ -40,7 +33,6 @@ def test_demo_store_scoring_returns_best_and_all():
     assert "Store" in best
     assert "Score" in best
 
-    # Best score must be >= any other entry's Score
     scores = [r["Score"] for r in rows]
     assert best["Score"] == max(scores)
 
@@ -57,3 +49,4 @@ def test_simulate_route_shape():
 
     assert result["total_distance_miles"] >= 0
     assert result["gas_used"] >= 0
+
